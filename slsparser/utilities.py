@@ -1,6 +1,6 @@
 from typing import Optional, Dict
 from rdflib import Literal
-from shapels import SANode, Op
+from slsparser.shapels import SANode, Op
 
 
 def expand_shape(definitions: Dict, node: SANode) -> SANode:

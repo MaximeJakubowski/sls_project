@@ -6,8 +6,8 @@ from rdflib import SH, RDF, RDFS
 from rdflib.term import URIRef, Literal, BNode, Node
 from rdflib.collection import Collection
 
-import pathls
-from pathls import PANode, POp
+from slsparser.pathls import parse as pparse
+from slsparser.pathls import PANode, POp
 
 
 class Op(Enum):
@@ -101,10 +101,12 @@ def parse(graph: Graph):
     propertyshapes = list(graph.subjects(RDF.type, SH.PropertyShape)) + \
                      list(graph.objects(predicate=SH.property)) + \
                      list(graph.subjects(SH.path))
+    
+    propertyshapes = list(set(propertyshapes)) # remove duplicates
 
     for propertyshape in propertyshapes:
         path = _extract_parameter_values(graph, propertyshape, SH.path)[0]
-        parsed_path = pathls.parse(graph, path)
+        parsed_path = pparse(graph, path)
         definitions[propertyshape] = _propertyshape_parse(graph, parsed_path,
                                                           propertyshape)
         target[propertyshape] = _target_parse(graph, propertyshape)
@@ -155,11 +157,11 @@ def _nodeshape_parse(graph: Graph, shapename: Node) -> SANode:
     # same pattern: they return list[SANode] representing a conjunction of
     # SANodes. This list can be empty.
     conj = _shape_parse(graph, shapename) + \
-           _logic_parse(graph, shapename) + \
-           _tests_parse(graph, shapename) + \
-           _value_parse(graph, shapename) + \
-           _in_parse(graph, shapename) + \
-           _closed_parse(graph, shapename)
+            _logic_parse(graph, shapename) + \
+            _tests_parse(graph, shapename) + \
+            _value_parse(graph, shapename) + \
+            _in_parse(graph, shapename) + \
+            _closed_parse(graph, shapename)
 
     if conj:
         return SANode(Op.AND, conj)
@@ -169,11 +171,16 @@ def _nodeshape_parse(graph: Graph, shapename: Node) -> SANode:
 
 def _propertyshape_parse(graph: Graph, path: PANode,
                          shapename: Node) -> SANode:
-    return SANode(Op.AND, [_card_parse(graph, path, shapename),
-                           _pair_parse(graph, path, shapename),
-                           _qual_parse(graph, path, shapename),
-                           _all_parse(graph, path, shapename),
-                           _lang_parse(graph, path, shapename)])
+    conj = _card_parse(graph, path, shapename) + \
+            _pair_parse(graph, path, shapename) + \
+            _qual_parse(graph, path, shapename) + \
+            _all_parse(graph, path, shapename) + \
+            _lang_parse(graph, path, shapename)
+    
+    if conj:
+        return SANode(Op.AND, conj)
+    # otherwise, if the shape has no defining components:
+    return SANode(Op.TOP, [])  # modeled after behaviour of validators
 
 
 def _shape_parse(graph: Graph, shapename: Node) -> list[SANode]:
@@ -274,7 +281,7 @@ def _tests_parse(graph: Graph, shapename: Node) -> list[SANode]:
         # something strange is going on with character escapes
         # if a pattern contains a double backslash 'hello\\w' for example
         # it will be read by the rdflib parser as 'hello\w'
-        conj_out.append(SANode(Op.TEST, ['pattern', escaped_pattern, flags]))
+        conj_out.append(SANode(Op.TEST, ['pattern', Literal(escaped_pattern), flags]))
 
     return conj_out
 
@@ -338,23 +345,23 @@ def _pair_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
     # sh:equals
     for eq in _extract_parameter_values(graph, shapename, SH.equals):
         conj_out.append(SANode(Op.EQ, [path,
-                                       pathls.parse(graph, eq)]))
+                                       pparse(graph, eq)]))
 
     # sh:disjoint
     for disj in _extract_parameter_values(graph, shapename, SH.disjoint):
         conj_out.append(SANode(Op.DISJ, [path,
-                                         pathls.parse(graph, disj)]))
+                                         pparse(graph, disj)]))
 
     # sh:lessThan
     for lt in _extract_parameter_values(graph, shapename, SH.lessThan):
         conj_out.append(SANode(Op.LESSTHAN, [path,
-                                             pathls.parse(graph, lt)]))
+                                             pparse(graph, lt)]))
 
     # sh:lessThanEq
     for lte in _extract_parameter_values(graph, shapename,
                                          SH.lessThanOrEquals):
         conj_out.append(SANode(Op.LESSTHANEQ, [path,
-                                               pathls.parse(graph, lte)]))
+                                               pparse(graph, lte)]))
 
     return conj_out
 
@@ -403,7 +410,7 @@ def _all_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
                   _in_parse(graph, shapename) + \
                   _closed_parse(graph, shapename)
     if forall_conj:
-        conj_out.append(SANode(Op.FORALL, forall_conj))
+        conj_out.append(SANode(Op.FORALL, [path, SANode(Op.AND, forall_conj)]))
 
     for component in _value_parse(graph, shapename):
         conj_out.append(SANode(Op.GEQ, [Literal(1), path, component]))
@@ -411,8 +418,8 @@ def _all_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
     return conj_out
 
 
-def _lang_parse(graph: Graph, path: PANode, shapename: Node) -> SANode:
-    out = SANode(Op.AND, [])
+def _lang_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
+    conj_out = []
 
     # sh:languageIn
     for langin in _extract_parameter_values(graph, shapename, SH.languageIn):
@@ -420,13 +427,13 @@ def _lang_parse(graph: Graph, path: PANode, shapename: Node) -> SANode:
         shacl_list = Collection(graph, langin)
         for lang in shacl_list:
             _out.children.append(SANode(Op.TEST, ['languageIn', lang]))
-        out.children.append(SANode(Op.FORALL, [path, _out]))
+        conj_out.append(SANode(Op.FORALL, [path, _out]))
 
     # sh:uniqueLang
     if (shapename, SH.uniqueLang, Literal(True)) in graph:
-        out.children.append(SANode(Op.UNIQUELANG, [path]))
+        conj_out.append(SANode(Op.UNIQUELANG, [path]))
 
-    return out
+    return conj_out
 
 
 def _extract_parameter_values(graph: Graph, shapename: Node, parameter: URIRef) -> List[Node]:

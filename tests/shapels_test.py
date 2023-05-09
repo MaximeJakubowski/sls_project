@@ -1,11 +1,12 @@
 import pytest
 
-from rdflib.namespace import RDF, XSD, SH
+from rdflib.namespace import RDF, RDFS, XSD, SH
 from pytest import mark
 from rdflib import Graph, Namespace, Literal
 
-from shapels import parse, Op, SANode, optimize_tree, expand_shape
-from pathls import PANode, POp
+from slsparser.shapels import parse, Op, SANode
+from slsparser.pathls import PANode, POp
+from slsparser.utilities import optimize_tree, expand_shape
 
 
 EX = Namespace('http://ex.tt/')
@@ -21,10 +22,9 @@ EX = Namespace('http://ex.tt/')
     ('shape_logic.ttl',
      {EX.shape: SANode(Op.AND, [
          SANode(Op.NOT, [SANode(Op.HASSHAPE, [EX.not1])]),
-         SANode(Op.AND, [
-             SANode(Op.HASSHAPE, [EX.and1]),
-             SANode(Op.HASSHAPE, [EX.and2]),
-             SANode(Op.HASSHAPE, [EX.and3])]),
+         SANode(Op.HASSHAPE, [EX.and1]),
+         SANode(Op.HASSHAPE, [EX.and2]),
+         SANode(Op.HASSHAPE, [EX.and3]),
          SANode(Op.OR, [
              SANode(Op.HASSHAPE, [EX.or1]),
              SANode(Op.HASSHAPE, [EX.or2]),
@@ -44,7 +44,10 @@ EX = Namespace('http://ex.tt/')
                  SANode(Op.NOT, [SANode(Op.HASSHAPE, [EX.xone2])])])])])}),
     ('shape_tests.ttl',
      {EX.shape: SANode(Op.AND, [
-         SANode(Op.GEQ, [Literal(1), RDF.type,
+         SANode(Op.GEQ, [Literal(1), 
+                         PANode(POp.COMP, [
+                             PANode(POp.PROP, [RDF.type]), 
+                             PANode(POp.KLEENE, [PANode(POp.PROP, [RDFS.subClassOf])])]),
                          SANode(Op.HASVALUE, [EX['class1']])]),
          SANode(Op.TEST, ['datatype', XSD.string]),
          SANode(Op.TEST, ['nodekind', SH.IRI]),
@@ -57,15 +60,14 @@ EX = Namespace('http://ex.tt/')
          SANode(Op.TEST, ['pattern', Literal('^B'), [Literal('i')]])])}),
     ('shape_value_in_closed.ttl',
      {EX.shape: SANode(Op.AND, [
-         SANode(Op.AND, [  # this AND could be optimized away
-             SANode(Op.HASSHAPE, [EX.pshape1]),
-             SANode(Op.HASSHAPE, [EX.pshape2])]),
+         SANode(Op.HASSHAPE, [EX.pshape1]),
+         SANode(Op.HASSHAPE, [EX.pshape2]),
          SANode(Op.HASVALUE, [EX.val1]),
          SANode(Op.OR, [
              SANode(Op.HASVALUE, [EX.val2]),
              SANode(Op.HASVALUE, [EX.val3]),
              SANode(Op.HASVALUE, [EX.val4])]),
-         SANode(Op.CLOSED, [EX.p1, EX.p2, EX.p3])]),
+         SANode(Op.CLOSED, [PANode(POp.PROP, [EX.p1]), PANode(POp.PROP, [EX.p2]), PANode(POp.PROP, [EX.p3])])]),
       EX.pshape1: SANode(Op.GEQ, [Literal(1), PANode(POp.PROP, [EX.p3]),
                                   SANode(Op.HASVALUE, [EX.val5])]),
       EX.pshape2: SANode(Op.GEQ, [Literal(1),
@@ -127,7 +129,7 @@ EX = Namespace('http://ex.tt/')
          ])
 def test_shape_parsing(graph_file, expected):
     g = Graph()
-    g.parse('./sls_testfiles/' + graph_file)
+    g.parse(f'./tests/sls_testfiles/{graph_file}')
     g.namespace_manager.bind('rdf', RDF)
     # print('********* PARSED GRAPH  *********')
     # for s, p, o in g:
@@ -156,7 +158,7 @@ def test_shape_parsing(graph_file, expected):
                      SANode(Op.HASVALUE, [Literal(1)])]))])
 def test_shape_expansion(graph_file, expected):
     g = Graph()
-    g.parse('./sls_testfiles/' + graph_file)
+    g.parse(f'./tests/sls_testfiles/{graph_file}')
     g.namespace_manager.bind('rdf', RDF)
 
     parsed = parse(g)[0]
