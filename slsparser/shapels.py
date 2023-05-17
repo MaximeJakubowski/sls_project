@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict
 from enum import Enum, auto
+import math
 
 from rdflib import Graph
 from rdflib import SH, RDF, RDFS
@@ -16,12 +17,26 @@ class Op(Enum):
     AND = auto() # Op.AND SANode SANode ...
     OR = auto() # Op.OR SANode SANode ...
     TEST = auto() # Op.TEST "testname" argument
+    # possible testnames: [testname, element1, element2, ...]
+    # - [languageIn ...]
+    # - [datatype, xsd:string] or other datatypes
+    # - [nodekind, sh:iri] or other: any of the six combinations
+    # - [pattern, patternstring, flags] 
+    # - [numeric_range, <range_statement>, <value>]
+    #   - <range_statement> is one of: min_exclusive, max_exclusive, min_inclusive, max_inclusive
+    #   - <value> is an rdflib literal (numeric) value
+    #   There is at most one of min_... and at most one of max_... followed by a value 
+    # - [length_range, <range_statement>, <value>]
+    #   - <range_statement> is one of: min_length, max_length
+    #   - <value> is an rdflib literal (numeric) value
+    #   There is at most one of min_... and at most one of max_... followed by a value 
     HASSHAPE = auto() # Op.HASSHAPE iri
     GEQ = auto() # Op.GEQ number PANode SANode
     LEQ = auto() # Op.LEQ number PANode SANode
     FORALL = auto() # Op.FORALL number PANode SANode
     EQ = auto() # Op.EQ PANode PANode
-    DISJ = auto() # Op.DISJ PANode PANode
+    DISJ = auto() # Op.DISJ PANode PANode 
+    # for eq(id,p) and disj(id,p) I add id to pathls.POp.ID
     CLOSED = auto() # Op.CLOSED iri iri ...
     LESSTHAN = auto() # Op.LESSTHAN PANode PANode
     LESSTHANEQ = auto() # Op.LESSTHANEQ PANode PANode
@@ -33,7 +48,6 @@ class Op(Enum):
 
     # optimization constructs
     EXACTLY1 = auto() # exactly one is an optimization operator: mincount 1 and maxcount 1 --> exactly 1
-    #CARDINALITY = auto() # mincount and maxcount combined. Children: min, max, shape. at most one of min or max may be none.
 
 
 class SANode:  # Shape Algebra Node
@@ -120,28 +134,32 @@ def _target_parse(graph: Graph, shapename: Node) -> SANode:
         out.children.append(SANode(Op.HASVALUE, [tnode]))
 
     for tclass in _extract_parameter_values(graph, shapename, SH.targetClass):
-        out.children.append(SANode(Op.GEQ, [
+        out.children.append(SANode(Op.COUNTRANGE, [
             Literal(1),
+            None,
             PANode(POp.PROP, [RDF.type]),
             SANode(Op.HASVALUE, [tclass])]))
 
     if (shapename, RDF.type, RDFS.Class) in graph:
-        out.children.append(SANode(Op.GEQ, [
+        out.children.append(SANode(Op.COUNTRANGE, [
             Literal(1),
+            None,
             PANode(POp.PROP, [RDF.type]),
             SANode(Op.HASVALUE, [shapename])]))
 
     for tsub in _extract_parameter_values(graph, shapename,
                                           SH.targetSubjectsOf):
-        out.children.append(SANode(Op.GEQ, [
+        out.children.append(SANode(Op.COUNTRANGE, [
             Literal(1),
+            None,
             PANode(POp.PROP, [tsub]),
             SANode(Op.TOP, [])]))
 
     for tobj in _extract_parameter_values(graph, shapename,
                                           SH.targetObjectsOf):
-        out.children.append(SANode(Op.GEQ, [
+        out.children.append(SANode(Op.COUNTRANGE, [
             Literal(1),
+            None,
             PANode(POp.INV, [
                 PANode(POp.PROP, [tobj])]),
             SANode(Op.TOP, [])]))
@@ -161,7 +179,8 @@ def _nodeshape_parse(graph: Graph, shapename: Node) -> SANode:
             _tests_parse(graph, shapename) + \
             _value_parse(graph, shapename) + \
             _in_parse(graph, shapename) + \
-            _closed_parse(graph, shapename)
+            _closed_parse(graph, shapename) + \
+            _pair_parse(graph, PANode(POp.ID, []), shapename) # EQ/DISJ id
 
     if conj:
         return SANode(Op.AND, conj)
@@ -229,7 +248,7 @@ def _tests_parse(graph: Graph, shapename: Node) -> list[SANode]:
     # sh:class
     for sh_class in _extract_parameter_values(graph, shapename, SH['class']):
         conj_out.append(
-            SANode(Op.GEQ, [Literal(1), PANode(POp.COMP, [
+            SANode(Op.COUNTRANGE, [Literal(1), None, PANode(POp.COMP, [
                 PANode(POp.PROP, [RDF.type]),
                 PANode(POp.KLEENE, [PANode(POp.PROP, [RDFS.subClassOf])])]),
                             SANode(Op.HASVALUE, [sh_class])]))
@@ -281,7 +300,7 @@ def _tests_parse(graph: Graph, shapename: Node) -> list[SANode]:
         # something strange is going on with character escapes
         # if a pattern contains a double backslash 'hello\\w' for example
         # it will be read by the rdflib parser as 'hello\w'
-        conj_out.append(SANode(Op.TEST, ['pattern', Literal(escaped_pattern), flags]))
+        conj_out.append(SANode(Op.TEST, ['pattern', escaped_pattern, flags]))
 
     return conj_out
 
@@ -327,15 +346,29 @@ def _closed_parse(graph: Graph, shapename: Node) -> list[SANode]:
 
 
 def _card_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
+    # TODO: no need anymore fore conj_out
     conj_out = []
+
+    infinite = Literal(999999) # TODO: elegance
+    smallest_min = infinite
     for min_card in _extract_parameter_values(graph, shapename, SH.minCount):
-        conj_out.append(SANode(Op.GEQ, [min_card, path,
-                                        SANode(Op.TOP, [])]))
+        if int(min_card) < int(smallest_min):
+            smallest_min = min_card
+        # conj_out.append(SANode(Op.GEQ, [min_card, path,
+        #                                 SANode(Op.TOP, [])]))
 
+    min_infinite = Literal(-1)
+    largest_max = min_infinite
     for max_card in _extract_parameter_values(graph, shapename, SH.maxCount):
-        conj_out.append(SANode(Op.LEQ, [max_card, path,
-                                        SANode(Op.TOP, [])]))
-
+        if max_card > largest_max:
+            largest_max = max_card
+        # conj_out.append(SANode(Op.LEQ, [max_card, path,
+        #                                 SANode(Op.TOP, [])]))
+    
+    if smallest_min != infinite or largest_max != min_infinite:
+        conj_out.append(SANode(Op.COUNTRANGE, [smallest_min if smallest_min != infinite else Literal(0),
+                                            largest_max if largest_max != min_infinite else None,
+                                            path, SANode(Op.TOP, [])]))
     return conj_out
 
 
@@ -395,10 +428,23 @@ def _qual_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
             result_qvs.children.append(SANode(Op.NOT, [
                 SANode(Op.HASSHAPE, [s])]))
 
+        infinite = Literal(999999) # TODO: elegance
+        smallest_min = infinite
         for count in qual_min:
-            conj_out.append(SANode(Op.GEQ, [count, path, result_qvs]))
+            if int(count) < int(smallest_min):
+                smallest_min = count
+            # conj_out.append(SANode(Op.GEQ, [count, path, result_qvs]))
+        min_infinite = Literal(-1)
+        largest_max = min_infinite
         for count in qual_max:
-            conj_out.append(SANode(Op.LEQ, [count, path, result_qvs]))
+            if count > largest_max:
+                largest_max = count
+            # conj_out.append(SANode(Op.LEQ, [count, path, result_qvs]))
+
+        conj_out.append(SANode(Op.COUNTRANGE, [smallest_min if smallest_min != infinite else Literal(0),
+                                               largest_max if largest_max != min_infinite else None,
+                                               path, result_qvs]))
+
     return conj_out
 
 
@@ -413,7 +459,7 @@ def _all_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
         conj_out.append(SANode(Op.FORALL, [path, SANode(Op.AND, forall_conj)]))
 
     for component in _value_parse(graph, shapename):
-        conj_out.append(SANode(Op.GEQ, [Literal(1), path, component]))
+        conj_out.append(SANode(Op.COUNTRANGE, [Literal(1), None, path, component]))
 
     return conj_out
 
@@ -422,11 +468,13 @@ def _lang_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
     conj_out = []
 
     # sh:languageIn
+    literal_list = []
     for langin in _extract_parameter_values(graph, shapename, SH.languageIn):
-        _out = SANode(Op.OR, [])
         shacl_list = Collection(graph, langin)
-        for lang in shacl_list:
-            _out.children.append(SANode(Op.TEST, ['languageIn', lang]))
+        literal_list += [tag for tag in shacl_list]
+
+    if literal_list:
+        _out = SANode(Op.TEST, ['languageIn', literal_list])
         conj_out.append(SANode(Op.FORALL, [path, _out]))
 
     # sh:uniqueLang

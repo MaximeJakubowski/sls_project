@@ -15,8 +15,9 @@ EX = Namespace('http://ex.tt/')
 @mark.parametrize('graph_file, expected', [
     ('shape_basic.ttl',
      {EX.shape: SANode(Op.HASSHAPE, [EX.oner]),
-      EX.oner: SANode(Op.GEQ, [
+      EX.oner: SANode(Op.COUNTRANGE, [
           Literal(1),
+          None,
           PANode(POp.PROP, [EX.r]),
           SANode(Op.TOP, [])])}),
     ('shape_logic.ttl',
@@ -44,11 +45,12 @@ EX = Namespace('http://ex.tt/')
                  SANode(Op.NOT, [SANode(Op.HASSHAPE, [EX.xone2])])])])])}),
     ('shape_tests.ttl',
      {EX.shape: SANode(Op.AND, [
-         SANode(Op.GEQ, [Literal(1), 
-                         PANode(POp.COMP, [
-                             PANode(POp.PROP, [RDF.type]), 
-                             PANode(POp.KLEENE, [PANode(POp.PROP, [RDFS.subClassOf])])]),
-                         SANode(Op.HASVALUE, [EX['class1']])]),
+         SANode(Op.COUNTRANGE, [Literal(1), 
+                                None,
+                                PANode(POp.COMP, [
+                                    PANode(POp.PROP, [RDF.type]), 
+                                    PANode(POp.KLEENE, [PANode(POp.PROP, [RDFS.subClassOf])])]),
+                                SANode(Op.HASVALUE, [EX['class1']])]),
          SANode(Op.TEST, ['datatype', XSD.string]),
          SANode(Op.TEST, ['nodekind', SH.IRI]),
          SANode(Op.TEST, ['min_inclusive', Literal(1)]),
@@ -57,7 +59,7 @@ EX = Namespace('http://ex.tt/')
          SANode(Op.TEST, ['max_exclusive', Literal(10)]),
          SANode(Op.TEST, ['min_length', Literal(1)]),
          SANode(Op.TEST, ['max_length', Literal(10)]),
-         SANode(Op.TEST, ['pattern', Literal('^B'), [Literal('i')]])])}),
+         SANode(Op.TEST, ['pattern', '^B', [Literal('i')]])])}),
     ('shape_value_in_closed.ttl',
      {EX.shape: SANode(Op.AND, [
          SANode(Op.HASSHAPE, [EX.pshape1]),
@@ -68,39 +70,32 @@ EX = Namespace('http://ex.tt/')
              SANode(Op.HASVALUE, [EX.val3]),
              SANode(Op.HASVALUE, [EX.val4])]),
          SANode(Op.CLOSED, [PANode(POp.PROP, [EX.p1]), PANode(POp.PROP, [EX.p2]), PANode(POp.PROP, [EX.p3])])]),
-      EX.pshape1: SANode(Op.GEQ, [Literal(1), PANode(POp.PROP, [EX.p3]),
-                                  SANode(Op.HASVALUE, [EX.val5])]),
-      EX.pshape2: SANode(Op.GEQ, [Literal(1),
-                                  PANode(POp.COMP, [
-                                      PANode(POp.PROP, [EX.p4]),
-                                      PANode(POp.PROP, [EX.p5])
-                                  ]),
-                                  SANode(Op.HASVALUE, [EX.val6])])}),
+      EX.pshape1: SANode(Op.COUNTRANGE, [Literal(1), None, PANode(POp.PROP, [EX.p3]),
+                                         SANode(Op.HASVALUE, [EX.val5])]),
+      EX.pshape2: SANode(Op.COUNTRANGE, [Literal(1), 
+                                         None,
+                                         PANode(POp.COMP, [
+                                            PANode(POp.PROP, [EX.p4]),
+                                            PANode(POp.PROP, [EX.p5])
+                                         ]),
+                                         SANode(Op.HASVALUE, [EX.val6])])}),
     ('shape_card_qual.ttl',
-     {EX.shape1: SANode(Op.AND, [
-         SANode(Op.GEQ, [Literal(3),
-                         PANode(POp.PROP, [EX.p1]),
-                         SANode(Op.TOP, [])]),
-         SANode(Op.LEQ, [Literal(6),
-                         PANode(POp.PROP, [EX.p1]),
-                         SANode(Op.TOP, [])])]),
+     {EX.shape1: SANode(Op.COUNTRANGE, [Literal(3), Literal(6),
+                                        PANode(POp.PROP, [EX.p1]),
+                                        SANode(Op.TOP, [])]),
       EX.shape: SANode(Op.AND, [
           SANode(Op.HASSHAPE, [EX.shape2]),
           SANode(Op.HASSHAPE, [EX.shape3])]),
-      EX.shape2: SANode(Op.AND, [
-          SANode(Op.GEQ, [Literal(4),
-                          PANode(POp.PROP, [EX.p2]),
-                          SANode(Op.HASSHAPE, [EX.shape4])]),
-          SANode(Op.LEQ, [Literal(8),
-                          PANode(POp.PROP, [EX.p2]),
-                          SANode(Op.HASSHAPE, [EX.shape4])])]),
-      EX.shape3: SANode(Op.GEQ, [Literal(7),
-                                 PANode(POp.PROP, [EX.p3]),
-                                 SANode(Op.AND, [
-                                     SANode(Op.HASSHAPE, [EX.shape5]),
-                                     SANode(Op.NOT, [
-                                         SANode(Op.HASSHAPE,
-                                                [EX.shape4])])])])}),
+      EX.shape2: SANode(Op.COUNTRANGE, [Literal(4), Literal(8),
+                                PANode(POp.PROP, [EX.p2]),
+                                SANode(Op.HASSHAPE, [EX.shape4])]),
+      EX.shape3: SANode(Op.COUNTRANGE, [Literal(7), None,
+                                        PANode(POp.PROP, [EX.p3]),
+                                        SANode(Op.AND, [
+                                            SANode(Op.HASSHAPE, [EX.shape5]),
+                                            SANode(Op.NOT, [
+                                                SANode(Op.HASSHAPE,
+                                                        [EX.shape4])])])])}),
     ('shape_pair.ttl',
      {EX.shape: SANode(Op.AND, [
         SANode(Op.EQ, [PANode(POp.PROP, [EX.p1]),
@@ -116,17 +111,18 @@ EX = Namespace('http://ex.tt/')
          SANode(Op.FORALL, [
              PANode(POp.PROP, [EX.p1]),
              SANode(Op.TEST, ['nodekind', SH.Literal])]),
-         SANode(Op.GEQ, [Literal(1),
-                         PANode(POp.PROP, [EX.p1]),
-                         SANode(Op.HASVALUE, [Literal(10)])])])}),
+         SANode(Op.COUNTRANGE, [Literal(1), 
+                                None,
+                                PANode(POp.PROP, [EX.p1]),
+                                SANode(Op.HASVALUE, [Literal(10)])])])}),
     ('shape_lang.ttl',
      {EX.shape: SANode(Op.AND, [
         SANode(Op.FORALL, [PANode(POp.PROP, [EX.p1]),
-                           SANode(Op.OR, [
-                            SANode(Op.TEST, ['languageIn', Literal('en')]),
-                            SANode(Op.TEST, ['languageIn', Literal('nl')])])]),
-        SANode(Op.UNIQUELANG, [PANode(POp.PROP, [EX.p1])])])})
-         ])
+                           SANode(Op.TEST, ['languageIn', [Literal('en'), Literal('nl')]])]),
+        SANode(Op.UNIQUELANG, [PANode(POp.PROP, [EX.p1])])])}),
+    ('shape_ideqdisj.ttl',
+     {EX.shape1: SANode(Op.EQ, [PANode(POp.ID, []), PANode(POp.PROP, [EX.p])]),
+      EX.shape2: SANode(Op.DISJ, [PANode(POp.ID, []), PANode(POp.PROP, [EX.p])])})])
 def test_shape_parsing(graph_file, expected):
     g = Graph()
     g.parse(f'./tests/sls_testfiles/{graph_file}')
@@ -153,9 +149,9 @@ def test_shape_parsing(graph_file, expected):
 
 @mark.parametrize('graph_file, expected', [
     ('expand_test1.ttl',
-     SANode(Op.GEQ, [Literal(1),
-                     PANode(POp.PROP, [EX.r1]),
-                     SANode(Op.HASVALUE, [Literal(1)])]))])
+     SANode(Op.COUNTRANGE, [Literal(1), None,
+                            PANode(POp.PROP, [EX.r1]),
+                            SANode(Op.HASVALUE, [Literal(1)])]))])
 def test_shape_expansion(graph_file, expected):
     g = Graph()
     g.parse(f'./tests/sls_testfiles/{graph_file}')

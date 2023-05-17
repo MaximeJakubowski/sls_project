@@ -15,6 +15,7 @@ class POp(Enum):  # Path Operator
     ALT = auto()
     KLEENE = auto()
     COMP = auto()
+    ID = auto() # for EQ and DISJ, no child
 
 
 class PANode:  # Path Algebra Node

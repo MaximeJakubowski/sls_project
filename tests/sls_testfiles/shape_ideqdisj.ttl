@@ -1,0 +1,8 @@
+@prefix : <http://ex.tt/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+:shape1 a sh:NodeShape ;
+    sh:equals :p .
+
+:shape2 a sh:NodeShape ;
+    sh:disjoint :p .
