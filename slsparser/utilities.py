@@ -49,22 +49,28 @@ def negation_normal_form(node: SANode) -> SANode:
     if nnode.op == Op.NOT:
         return nnode.children[0]
 
-    if nnode.op == Op.GEQ:
-        return SANode(Op.LEQ, [Literal(int(nnode.children[0]) - 1),
-                               nnode.children[1],
-                               negation_normal_form(
-                                   SANode(Op.NOT, [nnode.children[2]]))])
+    if nnode.op == Op.COUNTRANGE:
+        new_children = []
+        if nnode.children[1] is not None: 
+            new_children.append(SANode(Op.COUNTRANGE, 
+                                       [nnode.children[1], None, 
+                                        nnode.children[2], 
+                                        negation_normal_form(
+                                            SANode(Op.NOT, [nnode.children[3]]))]))
+        if nnode.children[0] != 0:
+            new_children.append(SANode(Op.COUNTRANGE, 
+                                       [0, nnode.children[0],
+                                        nnode.children[2],
+                                        negation_normal_form(
+                                            SANode(Op.NOT, [nnode.children[3]]))]))
 
-    if nnode.op == Op.LEQ:
-        return SANode(Op.GEQ, [Literal(int(nnode.children[0]) + 1),
-                               nnode.children[1],
-                               negation_normal_form(
-                                   SANode(Op.NOT, [nnode.children[2]]))])
+        return SANode(Op.OR, new_children)
 
     if nnode.op == Op.FORALL:
-        return SANode(Op.GEQ, [Literal(1), nnode.children[0],
-                               negation_normal_form(
-                                   SANode(Op.NOT, [nnode.children[1]]))])
+        return SANode(Op.COUNTRANGE, [Literal(1), None, 
+                                      nnode.children[0],
+                                      negation_normal_form(
+                                        SANode(Op.NOT, [nnode.children[1]]))])
     # We do not consider HASSHAPE as this function works on expanded shapes
     return node
 
