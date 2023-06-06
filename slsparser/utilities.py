@@ -77,14 +77,6 @@ def optimize_tree(tree: SANode) -> Optional[SANode]:
     remove top from conjunction
     """
 
-    # TODO: idea, split this fuction in "cleaning" and
-    # "optimizing". Some things can be considered cleaning: an Op.AND
-    # must have at least 2 children, if not, we need to adjust
-    # it. Another example is an Op.FORALL without a second child or
-    # Op.GEQ /LEQ without a third child.  However, some things just
-    # make sense: collapsing "AND" with an "AND" child. Same with
-    # OR. Or removing TOP from conjunctions.
-
     new_children = []
     for child in tree.children:
         if type(child) == SANode:
@@ -130,50 +122,10 @@ def optimize_tree(tree: SANode) -> Optional[SANode]:
     if tree.op == Op.FORALL and len(tree.children) == 1:
         return None
 
-    if tree.op == Op.GEQ and len(tree.children) == 2:
-        return None
-
     if tree.op in [Op.AND, Op.OR] and not tree.children:
         return None
 
     if tree.op in [Op.AND, Op.OR] and len(tree.children) == 1:
         return optimize_tree(tree.children[0])
-
-    return tree
-
-
-def _optimize_exactly1(tree: SANode) -> SANode:
-    new_children = []
-    for child in tree.children:
-        if type(child) == SANode:
-            new_children.append(
-                _optimize_exactly1(child))
-        else:
-            new_children.append(child)
-
-    tree = SANode(tree.op, new_children)
-
-    if tree.op == Op.AND:
-        # Optimization: if there is a GEQ 1 E TOP and LEQ 1 E TOP in its children, replace both with EXACTLY 1
-        is_geq_one_top = lambda c: c.op == Op.GEQ and \
-                                int(c.children[0]) == 1 and \
-                                c.children[2].op == Op.TOP
-        is_leq_one_top = lambda c: c.op == Op.LEQ and \
-                                int(c.children[0]) == 1 and \
-                                c.children[2].op == Op.TOP
-        if any(map(is_geq_one_top, tree.children)) and \
-                any(map(is_leq_one_top, tree.children)):
-            geq_one_tops = list(filter(is_geq_one_top, tree.children))
-            leq_one_tops = list(filter(is_leq_one_top, tree.children))
-
-            for geq_one in geq_one_tops:
-                for leq_one in leq_one_tops:
-                    if geq_one.children[1] == leq_one.children[1]:
-                        tree.children.append(SANode(Op.EXACTLY1, [geq_one.children[1]]))
-                        tree.children.remove(geq_one)
-                        tree.children.remove(leq_one)
-                        break
-
-            return SANode(Op.AND, tree.children)
 
     return tree

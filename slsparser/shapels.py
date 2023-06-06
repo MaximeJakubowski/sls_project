@@ -31,8 +31,6 @@ class Op(Enum):
     #   - <value> is an rdflib literal (numeric) value
     #   There is at most one of min_... and at most one of max_... followed by a value 
     HASSHAPE = auto() # Op.HASSHAPE iri
-    GEQ = auto() # Op.GEQ number PANode SANode
-    LEQ = auto() # Op.LEQ number PANode SANode
     FORALL = auto() # Op.FORALL number PANode SANode
     EQ = auto() # Op.EQ PANode PANode
     DISJ = auto() # Op.DISJ PANode PANode 
@@ -45,9 +43,6 @@ class Op(Enum):
     BOT = auto() # Op.BOT
 
     COUNTRANGE = auto() # Op.COUNTRANGE num num/None PANode SANode
-
-    # optimization constructs
-    EXACTLY1 = auto() # exactly one is an optimization operator: mincount 1 and maxcount 1 --> exactly 1
 
 
 class SANode:  # Shape Algebra Node
@@ -263,33 +258,15 @@ def _tests_parse(graph: Graph, shapename: Node) -> list[SANode]:
                                                  SH.nodeKind):
         conj_out.append(SANode(Op.TEST, ['nodekind', sh_nodekind]))
 
-    # sh:minInclusive
-    for sh_minincl in _extract_parameter_values(graph, shapename,
-                                                SH.minInclusive):
-        conj_out.append(SANode(Op.TEST, ['min_inclusive', sh_minincl]))
+    # numeric_range
+    numeric_range_shape = _numeric_range_parse(graph, shapename)
+    if numeric_range_shape:
+        conj_out.append(numeric_range_shape)
 
-    # sh:maxInclusive
-    for sh_maxincl in _extract_parameter_values(graph, shapename,
-                                                SH.maxInclusive):
-        conj_out.append(SANode(Op.TEST, ['max_inclusive', sh_maxincl]))
-
-    # sh:minExclusive
-    for sh_minexcl in _extract_parameter_values(graph, shapename,
-                                                SH.minExclusive):
-        conj_out.append(SANode(Op.TEST, ['min_exclusive', sh_minexcl]))
-
-    # sh:maxExclusive
-    for sh_maxexcl in _extract_parameter_values(graph, shapename,
-                                                SH.maxExclusive):
-        conj_out.append(SANode(Op.TEST, ['max_exclusive', sh_maxexcl]))
-
-    # sh:minLength
-    for sh_minlen in _extract_parameter_values(graph, shapename, SH.minLength):
-        conj_out.append(SANode(Op.TEST, ['min_length', sh_minlen]))
-
-    # sh:maxLength
-    for sh_maxlen in _extract_parameter_values(graph, shapename, SH.maxLength):
-        conj_out.append(SANode(Op.TEST, ['max_length', sh_maxlen]))
+    # length_range
+    length_range_shape = _length_range_parse(graph, shapename)
+    if length_range_shape:
+        conj_out.append(length_range_shape)
 
     # sh:pattern
     flags = [sh_flags for sh_flags in _extract_parameter_values(graph,
@@ -303,6 +280,90 @@ def _tests_parse(graph: Graph, shapename: Node) -> list[SANode]:
         conj_out.append(SANode(Op.TEST, ['pattern', escaped_pattern, flags]))
 
     return conj_out
+
+
+def _length_range_parse(graph: Graph, shapename: Node) -> Optional[SANode]:
+    # sh:minLength
+    min_infinite = Literal(-1)
+    max_minlen = min_infinite
+    for sh_minlen in _extract_parameter_values(graph, shapename, SH.minLength):
+        if sh_minlen > max_minlen:
+            max_minlen = sh_minlen
+
+    # sh:maxLength
+    infinite = Literal(999999)
+    min_maxlen = infinite
+    for sh_maxlen in _extract_parameter_values(graph, shapename, SH.maxLength):
+        if sh_maxlen < min_maxlen:
+            min_maxlen = sh_maxlen
+
+    length_range = ['length_range']
+    if max_minlen != min_infinite:
+        length_range += ['min_length', max_minlen]
+
+    if min_maxlen != infinite:
+        length_range += ['max_length', min_maxlen]
+
+    if len(length_range) > 1:
+        return SANode(Op.TEST, length_range)
+
+
+def _numeric_range_parse(graph: Graph, shapename: Node) -> Optional[SANode]:
+    # sh:minInclusive
+    min_infinite = Literal(-999999)
+    max_minincl = min_infinite
+    for sh_minincl in _extract_parameter_values(graph, shapename,
+                                                SH.minInclusive):
+        if sh_minincl > max_minincl:
+            max_minincl = sh_minincl
+
+    # sh:minExclusive
+    max_minexcl = min_infinite
+    for sh_minexcl in _extract_parameter_values(graph, shapename,
+                                                SH.minExclusive):
+        if sh_minexcl > max_minexcl:
+            max_minexcl = sh_minexcl
+
+    # do we use min_exlusive? (instead of inclusive)
+    min_exclusive = max_minexcl >= max_minexcl
+    
+    # sh:maxInclusive
+    infinite = Literal(999999)
+    min_maxincl = infinite
+    for sh_maxincl in _extract_parameter_values(graph, shapename,
+                                                SH.maxInclusive):
+        if sh_maxincl < min_maxincl:
+            min_maxincl = sh_maxincl
+
+    # sh:maxExclusive
+    min_maxexcl = infinite
+    for sh_maxexcl in _extract_parameter_values(graph, shapename,
+                                                SH.maxExclusive):
+        if sh_maxexcl < min_maxexcl:
+            min_maxexcl = sh_maxexcl
+
+    # do we use max_exlusive
+    max_exclusive = min_maxexcl < min_maxincl
+
+    # do we use numeric_min? was it present?
+    numeric_min = max_minexcl != min_infinite or max_minincl != min_infinite
+    
+    # do we use numeric_max? was it present?
+    numeric_max = min_maxexcl != infinite or min_maxincl != infinite
+
+    # construct numeric min/max TEST children 
+    numeric_range = ['numeric_range']
+    if numeric_min and min_exclusive:
+        numeric_range += ['min_exclusive', max_minexcl]
+    if numeric_min and not min_exclusive:
+        numeric_range += ['min_inclusive', max_minincl]
+    if numeric_max and max_exclusive:
+        numeric_range += ['max_exclusive', min_maxexcl]
+    if numeric_max and not max_exclusive:
+        numeric_range += ['max_inclusive', min_maxincl]
+
+    if len(numeric_range) > 1:
+        return SANode(Op.TEST, numeric_range)
 
 
 def _value_parse(graph: Graph, shapename: Node) -> list[SANode]:
@@ -346,30 +407,24 @@ def _closed_parse(graph: Graph, shapename: Node) -> list[SANode]:
 
 
 def _card_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
-    # TODO: no need anymore fore conj_out
-    conj_out = []
-
     infinite = Literal(999999) # TODO: elegance
     smallest_min = infinite
     for min_card in _extract_parameter_values(graph, shapename, SH.minCount):
         if int(min_card) < int(smallest_min):
             smallest_min = min_card
-        # conj_out.append(SANode(Op.GEQ, [min_card, path,
-        #                                 SANode(Op.TOP, [])]))
 
     min_infinite = Literal(-1)
     largest_max = min_infinite
     for max_card in _extract_parameter_values(graph, shapename, SH.maxCount):
         if max_card > largest_max:
             largest_max = max_card
-        # conj_out.append(SANode(Op.LEQ, [max_card, path,
-        #                                 SANode(Op.TOP, [])]))
     
-    if smallest_min != infinite or largest_max != min_infinite:
-        conj_out.append(SANode(Op.COUNTRANGE, [smallest_min if smallest_min != infinite else Literal(0),
-                                            largest_max if largest_max != min_infinite else None,
-                                            path, SANode(Op.TOP, [])]))
-    return conj_out
+    if smallest_min == infinite and largest_max == min_infinite:
+        return []
+    
+    return [SANode(Op.COUNTRANGE, [smallest_min if smallest_min != infinite else Literal(0),
+                                   largest_max if largest_max != min_infinite else None,
+                                   path, SANode(Op.TOP, [])])]
 
 
 def _pair_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
@@ -433,13 +488,12 @@ def _qual_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
         for count in qual_min:
             if int(count) < int(smallest_min):
                 smallest_min = count
-            # conj_out.append(SANode(Op.GEQ, [count, path, result_qvs]))
+
         min_infinite = Literal(-1)
         largest_max = min_infinite
         for count in qual_max:
             if count > largest_max:
                 largest_max = count
-            # conj_out.append(SANode(Op.LEQ, [count, path, result_qvs]))
 
         conj_out.append(SANode(Op.COUNTRANGE, [smallest_min if smallest_min != infinite else Literal(0),
                                                largest_max if largest_max != min_infinite else None,

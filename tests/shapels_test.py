@@ -53,12 +53,8 @@ EX = Namespace('http://ex.tt/')
                                 SANode(Op.HASVALUE, [EX['class1']])]),
          SANode(Op.TEST, ['datatype', XSD.string]),
          SANode(Op.TEST, ['nodekind', SH.IRI]),
-         SANode(Op.TEST, ['min_inclusive', Literal(1)]),
-         SANode(Op.TEST, ['max_inclusive', Literal(10)]),
-         SANode(Op.TEST, ['min_exclusive', Literal(1)]),
-         SANode(Op.TEST, ['max_exclusive', Literal(10)]),
-         SANode(Op.TEST, ['min_length', Literal(1)]),
-         SANode(Op.TEST, ['max_length', Literal(10)]),
+         SANode(Op.TEST, ['numeric_range', 'min_exclusive', Literal(1), 'max_inclusive', Literal(10)]),
+         SANode(Op.TEST, ['length_range', 'min_length', Literal(1), 'max_length', Literal(10)]),
          SANode(Op.TEST, ['pattern', '^B', [Literal('i')]])])}),
     ('shape_value_in_closed.ttl',
      {EX.shape: SANode(Op.AND, [
@@ -124,6 +120,11 @@ EX = Namespace('http://ex.tt/')
      {EX.shape1: SANode(Op.EQ, [PANode(POp.ID, []), PANode(POp.PROP, [EX.p])]),
       EX.shape2: SANode(Op.DISJ, [PANode(POp.ID, []), PANode(POp.PROP, [EX.p])])})])
 def test_shape_parsing(graph_file, expected):
+    print('==========================')
+    print('==========================')
+    print('==========================')
+    print('==========================')
+    print('==========================')
     g = Graph()
     g.parse(f'./tests/sls_testfiles/{graph_file}')
     g.namespace_manager.bind('rdf', RDF)
