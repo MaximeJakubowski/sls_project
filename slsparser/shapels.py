@@ -1,6 +1,5 @@
 from typing import List, Optional, Dict
 from enum import Enum, auto
-import math
 
 from rdflib import Graph
 from rdflib import SH, RDF, RDFS
@@ -284,24 +283,18 @@ def _tests_parse(graph: Graph, shapename: Node) -> list[SANode]:
 
 def _length_range_parse(graph: Graph, shapename: Node) -> Optional[SANode]:
     # sh:minLength
-    min_infinite = Literal(-1)
-    max_minlen = min_infinite
-    for sh_minlen in _extract_parameter_values(graph, shapename, SH.minLength):
-        if sh_minlen > max_minlen:
-            max_minlen = sh_minlen
+    max_minlen = _max_literal(
+        _extract_parameter_values(graph, shapename, SH.minLength))
 
     # sh:maxLength
-    infinite = Literal(999999)
-    min_maxlen = infinite
-    for sh_maxlen in _extract_parameter_values(graph, shapename, SH.maxLength):
-        if sh_maxlen < min_maxlen:
-            min_maxlen = sh_maxlen
+    min_maxlen = _min_literal(
+        _extract_parameter_values(graph, shapename, SH.maxLength))
 
     length_range = ['length_range']
-    if max_minlen != min_infinite:
+    if max_minlen is not None:
         length_range += ['min_length', max_minlen]
 
-    if min_maxlen != infinite:
+    if min_maxlen is not None:
         length_range += ['max_length', min_maxlen]
 
     if len(length_range) > 1:
@@ -309,47 +302,37 @@ def _length_range_parse(graph: Graph, shapename: Node) -> Optional[SANode]:
 
 
 def _numeric_range_parse(graph: Graph, shapename: Node) -> Optional[SANode]:
-    # sh:minInclusive
-    min_infinite = Literal(-999999)
-    max_minincl = min_infinite
-    for sh_minincl in _extract_parameter_values(graph, shapename,
-                                                SH.minInclusive):
-        if sh_minincl > max_minincl:
-            max_minincl = sh_minincl
-
-    # sh:minExclusive
-    max_minexcl = min_infinite
-    for sh_minexcl in _extract_parameter_values(graph, shapename,
-                                                SH.minExclusive):
-        if sh_minexcl > max_minexcl:
-            max_minexcl = sh_minexcl
-
-    # do we use min_exlusive? (instead of inclusive)
-    min_exclusive = max_minexcl >= max_minexcl
+    # sh:minInclusive / sh:minExclusive
+    max_minincl = _max_literal(
+        _extract_parameter_values(graph, shapename, SH.minInclusive))
+    max_minexcl = _max_literal(
+        _extract_parameter_values(graph, shapename, SH.minExclusive))
     
-    # sh:maxInclusive
-    infinite = Literal(999999)
-    min_maxincl = infinite
-    for sh_maxincl in _extract_parameter_values(graph, shapename,
-                                                SH.maxInclusive):
-        if sh_maxincl < min_maxincl:
-            min_maxincl = sh_maxincl
-
-    # sh:maxExclusive
-    min_maxexcl = infinite
-    for sh_maxexcl in _extract_parameter_values(graph, shapename,
-                                                SH.maxExclusive):
-        if sh_maxexcl < min_maxexcl:
-            min_maxexcl = sh_maxexcl
-
-    # do we use max_exlusive
-    max_exclusive = min_maxexcl < min_maxincl
+    # do we use min_exlusive? (instead of inclusive)
+    min_exclusive = False
+    if max_minincl and max_minexcl:
+        min_exclusive = max_minexcl >= max_minincl
+    elif max_minexcl:
+        min_exclusive = True
+    
+    # sh:maxInclusive / sh:maxExclusive    
+    min_maxincl = _min_literal(
+        _extract_parameter_values(graph, shapename, SH.maxInclusive))
+    min_maxexcl = _min_literal(
+        _extract_parameter_values(graph, shapename, SH.maxExclusive))
+        
+    # do we use max_exlusive?
+    max_exclusive = False
+    if min_maxincl and min_maxexcl:
+        max_exclusive = min_maxexcl < min_maxincl
+    elif min_maxexcl:
+        max_exclusive = True
 
     # do we use numeric_min? was it present?
-    numeric_min = max_minexcl != min_infinite or max_minincl != min_infinite
+    numeric_min = max_minexcl or max_minincl 
     
     # do we use numeric_max? was it present?
-    numeric_max = min_maxexcl != infinite or min_maxincl != infinite
+    numeric_max = min_maxexcl or min_maxincl 
 
     # construct numeric min/max TEST children 
     numeric_range = ['numeric_range']
@@ -364,6 +347,24 @@ def _numeric_range_parse(graph: Graph, shapename: Node) -> Optional[SANode]:
 
     if len(numeric_range) > 1:
         return SANode(Op.TEST, numeric_range)
+
+
+def _max_literal(list: List[Literal], invert=False) -> Optional[Literal]:
+    if len(list) == 0:
+        return None
+    
+    m_lit = list[0]
+    for lit in list:
+        if not invert:
+            m_lit = max(m_lit, lit)
+        else:
+            m_lit = min(m_lit, lit)
+
+    return m_lit
+
+
+def _min_literal(list: List[Literal]) -> Optional[Literal]:
+    return _max_literal(list, invert=True)
 
 
 def _value_parse(graph: Graph, shapename: Node) -> list[SANode]:
@@ -407,23 +408,16 @@ def _closed_parse(graph: Graph, shapename: Node) -> list[SANode]:
 
 
 def _card_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
-    infinite = Literal(999999) # TODO: elegance
-    smallest_min = infinite
-    for min_card in _extract_parameter_values(graph, shapename, SH.minCount):
-        if int(min_card) < int(smallest_min):
-            smallest_min = min_card
-
-    min_infinite = Literal(-1)
-    largest_max = min_infinite
-    for max_card in _extract_parameter_values(graph, shapename, SH.maxCount):
-        if max_card > largest_max:
-            largest_max = max_card
-    
-    if smallest_min == infinite and largest_max == min_infinite:
+    smallest_min = _min_literal(
+        _extract_parameter_values(graph, shapename, SH.minCount))
+    largest_max = _max_literal(
+        _extract_parameter_values(graph, shapename, SH.maxCount))
+            
+    if not (smallest_min or largest_max):
         return []
     
-    return [SANode(Op.COUNTRANGE, [smallest_min if smallest_min != infinite else Literal(0),
-                                   largest_max if largest_max != min_infinite else None,
+    return [SANode(Op.COUNTRANGE, [smallest_min if smallest_min else Literal(0),
+                                   largest_max, # can be none
                                    path, SANode(Op.TOP, [])])]
 
 
@@ -483,20 +477,11 @@ def _qual_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
             result_qvs.children.append(SANode(Op.NOT, [
                 SANode(Op.HASSHAPE, [s])]))
 
-        infinite = Literal(999999) # TODO: elegance
-        smallest_min = infinite
-        for count in qual_min:
-            if int(count) < int(smallest_min):
-                smallest_min = count
+        smallest_min = _min_literal(qual_min)
+        largest_max = _max_literal(qual_max)
 
-        min_infinite = Literal(-1)
-        largest_max = min_infinite
-        for count in qual_max:
-            if count > largest_max:
-                largest_max = count
-
-        conj_out.append(SANode(Op.COUNTRANGE, [smallest_min if smallest_min != infinite else Literal(0),
-                                               largest_max if largest_max != min_infinite else None,
+        conj_out.append(SANode(Op.COUNTRANGE, [smallest_min if smallest_min else Literal(0),
+                                               largest_max, # can be None
                                                path, result_qvs]))
 
     return conj_out
