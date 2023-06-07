@@ -527,7 +527,7 @@ def _extract_parameter_values(graph: Graph, shapename: Node, parameter: URIRef) 
     return list(graph.objects(shapename, parameter))
 
 
-def _escape_backslash(string):
+def _escape_backslash(string: str) -> str:
     new_string = ''
     for char in string:
         if char == '\\':
