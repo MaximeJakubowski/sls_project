@@ -75,63 +75,73 @@ def negation_normal_form(node: SANode) -> SANode:
     return node
 
 
-def optimize_tree(tree: SANode) -> Optional[SANode]:
+def clean_parsetree(sanode: SANode) -> SANode:
     """
-    go through tree in post-order
-    remove empty conjunctions,
-    replace singleton conjunctions with self,
-    remove top from conjunction
+    This function goes through the tree in post-order. It performs the 
+    following transformations:
+    - Replace NOT TOP by BOT
+    - Replace NOT BOT by TOP
+    - Remove TOP from AND. If empty AND, replace by TOP.
+    - Replace AND containing BOT by BOT
+    - Replace AND with single child by child
+    - Remove BOT from OR. If empty OR, replace by BOT.
+    - Replace OR containing TOP by TOP 
+    - Replace OR with single child by child
+    - Replace FORALL E TOP by TOP
+    - Replace FORALL E BOT by COUNTRANGE 0 0 E TOP
+    - Replace COUNTRANGE n m E BOT by:
+        - BOT if n is not 0
+        - TOP else
     """
-
+    
     new_children = []
-    for child in tree.children:
+    for child in sanode.children:
         if type(child) == SANode:
-            new_child = optimize_tree(child)
-            if new_child:  # if it is not removed
-                new_children.append(new_child)
+            new_child = clean_parsetree(child)
+            new_children.append(new_child)
         else:
             new_children.append(child)
 
-    tree = SANode(tree.op, new_children)
+    new_node = SANode(sanode.op, new_children)
 
-    # if there is a TOP, filter it out
-    if tree.op == Op.AND and any(map(lambda c: c.op == Op.TOP, tree.children)):
-        tree.children = list(filter(lambda c: c.op != Op.TOP, tree.children))
-        return optimize_tree(tree)
+    if new_node.op == Op.NOT:
+        if new_node.children[0].op == Op.TOP:
+            return SANode(Op.BOT, [])
+        if new_node.children[0].op == Op.BOT:
+            return SANode(Op.TOP, [])
+    
+    if new_node.op == Op.AND:
+        if any(map(lambda c: c.op == Op.BOT, new_node.children)):
+            return SANode(Op.BOT, [])
 
-    # if there is an AND node with AND children, merge them to one AND
-    if tree.op == Op.AND and any(map(lambda c: c.op == Op.AND, tree.children)):
-        new_children = []
-        for child in tree.children:
-            if child.op == Op.AND:
-                new_children.extend(child.children)
-            else:
-                new_children.append(child)
-        tree.children = new_children
-        return optimize_tree(tree)
+        if any(map(lambda c: c.op == Op.TOP, new_node.children)):
+            new_node.children = list(filter(lambda c: c.op != Op.TOP, new_node.children))
+            if not new_node.children:
+                return SANode(Op.TOP, [])
+            #return new_node
+    
+    if new_node.op == Op.OR:
+        if any(map(lambda c: c.op == Op.TOP, new_node.children)):
+            return SANode(Op.TOP, [])
 
-    # if there is an OR node with OR children, merge them to one OR
-    if tree.op == Op.OR and any(map(lambda c: c.op == Op.OR, tree.children)):
-        new_children = []
-        for child in tree.children:
-            if child.op == Op.OR:
-                new_children.extend(child.children)
-            else:
-                new_children.append(child)
-        tree.children = new_children
-        return optimize_tree(tree)
-
-    # remove a disjunction between TOPs
-    if tree.op == Op.OR and all(map(lambda c: c.op == Op.TOP, tree.children)):
-        return None
-
-    if tree.op == Op.FORALL and len(tree.children) == 1:
-        return None
-
-    if tree.op in [Op.AND, Op.OR] and not tree.children:
-        return None
-
-    if tree.op in [Op.AND, Op.OR] and len(tree.children) == 1:
-        return optimize_tree(tree.children[0])
-
-    return tree
+        if any(map(lambda c: c.op == Op.BOT, new_node.children)):
+            new_node.children = list(filter(lambda c: c.op != Op.BOT, new_node.children))
+            if not new_node.children:
+                return SANode(Op.BOT, [])
+            #return new_node
+    
+    if new_node.op in [Op.AND, Op.OR] and len(new_node.children) == 1:
+        return new_node.children[0]
+    
+    if new_node.op == Op.FORALL:
+        if new_node.children[1].op == Op.TOP:
+            return SANode(Op.TOP, [])
+        if new_node.children[1].op == Op.BOT:
+            return SANode(Op.COUNTRANGE, [0, 0, new_node.children[0], SANode(Op.TOP, [])])
+        
+    if new_node.op == Op.COUNTRANGE and new_node.children[3].op == Op.BOT:
+        if new_node.children[0] == 0:
+            return SANode(Op.TOP, [])
+        return SANode(Op.BOT, [])
+    
+    return new_node
