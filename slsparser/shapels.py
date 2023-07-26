@@ -9,7 +9,6 @@ from rdflib.collection import Collection
 from slsparser.pathls import parse as pparse
 from slsparser.pathls import PANode, POp
 
-
 class Op(Enum):
     HASVALUE = auto() # Op.HASVALUE val
     NOT = auto() # Op.NOT SANode
@@ -51,6 +50,9 @@ class SANode:  # Shape Algebra Node
 
     def __eq__(self, other):
         """ Overwrite the '==' operator """
+        if not isinstance(other, SANode):
+            return False
+        
         if len(self.children) != len(other.children):
             return False
 
@@ -95,13 +97,15 @@ def _extract_nodeshapes(graph: Graph) -> List[Node]:
 
 
 def parse(graph: Graph):
+    from slsparser.utilities import clean_parsetree
+
     definitions = {}  # a mapping: shapename, SANode
     target = {}  # a mapping: shapename, target shape
 
     nodeshapes = _extract_nodeshapes(graph)
 
     for nodeshape in nodeshapes:
-        definitions[nodeshape] = _nodeshape_parse(graph, nodeshape)
+        definitions[nodeshape] = clean_parsetree(_nodeshape_parse(graph, nodeshape))
         target[nodeshape] = _target_parse(graph, nodeshape)
 
     # this defines what propertyshapes are parsed, should follow the spec on
@@ -115,8 +119,7 @@ def parse(graph: Graph):
     for propertyshape in propertyshapes:
         path = _extract_parameter_values(graph, propertyshape, SH.path)[0]
         parsed_path = pparse(graph, path)
-        definitions[propertyshape] = _propertyshape_parse(graph, parsed_path,
-                                                          propertyshape)
+        definitions[propertyshape] = clean_parsetree(_propertyshape_parse(graph, parsed_path, propertyshape))
         target[propertyshape] = _target_parse(graph, propertyshape)
 
     return definitions, target

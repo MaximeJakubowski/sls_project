@@ -1,12 +1,11 @@
-import pytest
+from pytest import mark
 
 from rdflib.namespace import RDF, RDFS, XSD, SH
-from pytest import mark
 from rdflib import Graph, Namespace, Literal
 
 from slsparser.shapels import parse, Op, SANode
 from slsparser.pathls import PANode, POp
-from slsparser.utilities import optimize_tree, expand_shape
+from slsparser.utilities import expand_shape
 
 
 EX = Namespace('http://ex.tt/')
@@ -23,9 +22,10 @@ EX = Namespace('http://ex.tt/')
     ('shape_logic.ttl',
      {EX.shape: SANode(Op.AND, [
          SANode(Op.NOT, [SANode(Op.HASSHAPE, [EX.not1])]),
-         SANode(Op.HASSHAPE, [EX.and1]),
-         SANode(Op.HASSHAPE, [EX.and2]),
-         SANode(Op.HASSHAPE, [EX.and3]),
+         SANode(Op.AND, [
+            SANode(Op.HASSHAPE, [EX.and1]),
+            SANode(Op.HASSHAPE, [EX.and2]),
+            SANode(Op.HASSHAPE, [EX.and3])]),
          SANode(Op.OR, [
              SANode(Op.HASSHAPE, [EX.or1]),
              SANode(Op.HASSHAPE, [EX.or2]),
@@ -140,7 +140,7 @@ def test_shape_parsing(graph_file, expected):
     for key in list(expected):
         #print('------PARSED------')
         #print(key, parsed[key])
-        opt = optimize_tree(parsed[key])
+        opt = parsed[key]
         print('------OPTIMIZED------')
         print(opt)
         print('------EXPECTED------')
@@ -162,25 +162,10 @@ def test_shape_expansion(graph_file, expected):
 
     opt_schema = dict()
     for name in parsed.keys():
-        opt_schema[name] = optimize_tree(parsed[name])
+        opt_schema[name] = parsed[name]
 
     expanded = expand_shape(opt_schema, opt_schema[EX.shape])
 
     assert expanded == expected
-
-
-@mark.parametrize('graph_file, expected', [])
-def test_negation_normal_form(graph_file, expected):
-    pass
-
-
-@mark.parametrize('graph_file, expected', [])
-def test_shacl_to_sparql(graph_file, expected):
-    pass
-
-
-@mark.parametrize('graph_file, expected', [])
-def test_parse_targeting(graph_file, expected):
-    pass
 
 
