@@ -13,23 +13,23 @@ EX = Namespace('http://ex.tt/')
 
 @mark.parametrize('graph_file, expected', [
     ('shape_basic.ttl',
-     {EX.shape: SANode(Op.HASSHAPE, [EX.oner]),
+     {EX.shape: SANode(Op.HASSHAPE, [EX.oner], SH.PropertyConstraintComponent),
       EX.oner: SANode(Op.COUNTRANGE, [
           Literal(1),
           None,
           PANode(POp.PROP, [EX.r]),
-          SANode(Op.TOP, [])])}),
+          SANode(Op.TOP, [])], SH.MinCountConstraintComponent)}),
     ('shape_logic.ttl',
      {EX.shape: SANode(Op.AND, [
-         SANode(Op.NOT, [SANode(Op.HASSHAPE, [EX.not1])]),
+         SANode(Op.NOT, [SANode(Op.HASSHAPE, [EX.not1])], SH.NotConstraintComponent),
          SANode(Op.AND, [
             SANode(Op.HASSHAPE, [EX.and1]),
             SANode(Op.HASSHAPE, [EX.and2]),
-            SANode(Op.HASSHAPE, [EX.and3])]),
+            SANode(Op.HASSHAPE, [EX.and3])], SH.AndConstraintComponent),
          SANode(Op.OR, [
              SANode(Op.HASSHAPE, [EX.or1]),
              SANode(Op.HASSHAPE, [EX.or2]),
-             SANode(Op.HASSHAPE, [EX.or3])]),
+             SANode(Op.HASSHAPE, [EX.or3])], SH.OrConstraintComponent),
          SANode(Op.OR, [
              SANode(Op.AND, [
                  SANode(Op.HASSHAPE, [EX.xone1]),
@@ -42,7 +42,8 @@ EX = Namespace('http://ex.tt/')
              SANode(Op.AND, [
                  SANode(Op.HASSHAPE, [EX.xone3]),
                  SANode(Op.NOT, [SANode(Op.HASSHAPE, [EX.xone1])]),
-                 SANode(Op.NOT, [SANode(Op.HASSHAPE, [EX.xone2])])])])])}),
+                 SANode(Op.NOT, [SANode(Op.HASSHAPE, [EX.xone2])])])],
+                SH.XoneConstraintComponent)])}),
     ('shape_tests.ttl',
      {EX.shape: SANode(Op.AND, [
          SANode(Op.COUNTRANGE, [Literal(1), 
@@ -50,31 +51,31 @@ EX = Namespace('http://ex.tt/')
                                 PANode(POp.COMP, [
                                     PANode(POp.PROP, [RDF.type]), 
                                     PANode(POp.KLEENE, [PANode(POp.PROP, [RDFS.subClassOf])])]),
-                                SANode(Op.HASVALUE, [EX['class1']])]),
-         SANode(Op.TEST, ['datatype', XSD.string]),
-         SANode(Op.TEST, ['nodekind', SH.IRI]),
-         SANode(Op.TEST, ['numeric_range', 'min_exclusive', Literal(1), 'max_inclusive', Literal(10)]),
-         SANode(Op.TEST, ['length_range', 'min_length', Literal(1), 'max_length', Literal(10)]),
-         SANode(Op.TEST, ['pattern', '^B', [Literal('i')]])])}),
+                                SANode(Op.HASVALUE, [EX['class1']])], SH.ClassConstraintComponent),
+         SANode(Op.TEST, [SH.DatatypeConstraintComponent, XSD.string], SH.DatatypeConstraintComponent),
+         SANode(Op.TEST, [SH.NodeKindConstraintComponent, SH.IRI], SH.NodeKindConstraintComponent),
+         SANode(Op.TEST, ['numeric_range', SH.MinExclusiveConstraintComponent, Literal(1), SH.MaxInclusiveConstraintComponent, Literal(10)]),
+         SANode(Op.TEST, ['length_range', SH.MinLengthConstraintComponent, Literal(1), SH.MaxLengthConstraintComponent, Literal(10)]),
+         SANode(Op.TEST, [SH.PatternConstraintComponent, '^B', [Literal('i')]], SH.PatternConstraintComponent)])}),
     ('shape_value_in_closed.ttl',
      {EX.shape: SANode(Op.AND, [
-         SANode(Op.HASSHAPE, [EX.pshape1]),
-         SANode(Op.HASSHAPE, [EX.pshape2]),
-         SANode(Op.HASVALUE, [EX.val1]),
+         SANode(Op.HASSHAPE, [EX.pshape1], SH.PropertyConstraintComponent),
+         SANode(Op.HASSHAPE, [EX.pshape2], SH.PropertyConstraintComponent),
+         SANode(Op.HASVALUE, [EX.val1], SH.HasValueConstraintComponent),
          SANode(Op.OR, [
              SANode(Op.HASVALUE, [EX.val2]),
              SANode(Op.HASVALUE, [EX.val3]),
-             SANode(Op.HASVALUE, [EX.val4])]),
-         SANode(Op.CLOSED, [PANode(POp.PROP, [EX.p1]), PANode(POp.PROP, [EX.p2]), PANode(POp.PROP, [EX.p3])])]),
+             SANode(Op.HASVALUE, [EX.val4])], SH.InConstraintComponent),
+         SANode(Op.CLOSED, [PANode(POp.PROP, [EX.p1]), PANode(POp.PROP, [EX.p2]), PANode(POp.PROP, [EX.p3])])], SH.ClosedConstraintComponent),
       EX.pshape1: SANode(Op.COUNTRANGE, [Literal(1), None, PANode(POp.PROP, [EX.p3]),
-                                         SANode(Op.HASVALUE, [EX.val5])]),
+                                         SANode(Op.HASVALUE, [EX.val5])], SH.HasValueConstraintComponent),
       EX.pshape2: SANode(Op.COUNTRANGE, [Literal(1), 
                                          None,
                                          PANode(POp.COMP, [
                                             PANode(POp.PROP, [EX.p4]),
                                             PANode(POp.PROP, [EX.p5])
                                          ]),
-                                         SANode(Op.HASVALUE, [EX.val6])])}),
+                                         SANode(Op.HASVALUE, [EX.val6])], SH.HasValueConstraintComponent)}),
     ('shape_card_qual.ttl',
      {EX.shape1: SANode(Op.COUNTRANGE, [Literal(3), Literal(6),
                                         PANode(POp.PROP, [EX.p1]),
@@ -106,7 +107,7 @@ EX = Namespace('http://ex.tt/')
      {EX.shape: SANode(Op.AND, [
          SANode(Op.FORALL, [
              PANode(POp.PROP, [EX.p1]),
-             SANode(Op.TEST, ['nodekind', SH.Literal])]),
+             SANode(Op.TEST, [SH.NodeKindConstraintComponent, SH.Literal])]),
          SANode(Op.COUNTRANGE, [Literal(1), 
                                 None,
                                 PANode(POp.PROP, [EX.p1]),
@@ -114,7 +115,7 @@ EX = Namespace('http://ex.tt/')
     ('shape_lang.ttl',
      {EX.shape: SANode(Op.AND, [
         SANode(Op.FORALL, [PANode(POp.PROP, [EX.p1]),
-                           SANode(Op.TEST, ['languageIn', [Literal('en'), Literal('nl')]])]),
+                           SANode(Op.TEST, [SH.LanguageInConstraintComponent, [Literal('en'), Literal('nl')]])]),
         SANode(Op.UNIQUELANG, [PANode(POp.PROP, [EX.p1])])])}),
     ('shape_ideqdisj.ttl',
      {EX.shape1: SANode(Op.EQ, [PANode(POp.ID, []), PANode(POp.PROP, [EX.p])]),
