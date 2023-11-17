@@ -313,9 +313,9 @@ def _numeric_range_parse(graph: Graph, shapename: Node) -> Optional[SANode]:
     
     # do we use min_exlusive? (instead of inclusive)
     min_exclusive = False
-    if max_minincl and max_minexcl:
+    if max_minincl is not None and max_minexcl is not None:
         min_exclusive = max_minexcl >= max_minincl
-    elif max_minexcl:
+    elif max_minexcl is not None:
         min_exclusive = True
     
     # sh:maxInclusive / sh:maxExclusive    
@@ -326,16 +326,16 @@ def _numeric_range_parse(graph: Graph, shapename: Node) -> Optional[SANode]:
         
     # do we use max_exlusive?
     max_exclusive = False
-    if min_maxincl and min_maxexcl:
+    if min_maxincl is not None and min_maxexcl is not None:
         max_exclusive = min_maxexcl < min_maxincl
-    elif min_maxexcl:
+    elif min_maxexcl is not None:
         max_exclusive = True
 
     # do we use numeric_min? was it present?
-    numeric_min = max_minexcl or max_minincl 
+    numeric_min = max_minexcl is not None or max_minincl is not None
     
     # do we use numeric_max? was it present?
-    numeric_max = min_maxexcl or min_maxincl 
+    numeric_max = min_maxexcl is not None or min_maxincl is not None
 
     # construct numeric min/max TEST children 
     numeric_range = ['numeric_range']
@@ -416,10 +416,10 @@ def _card_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
     largest_max = _max_literal(
         _extract_parameter_values(graph, shapename, SH.maxCount))
             
-    if not (smallest_min or largest_max):
+    if smallest_min is None and largest_max is None:
         return []
     
-    return [SANode(Op.COUNTRANGE, [smallest_min if smallest_min else Literal(0),
+    return [SANode(Op.COUNTRANGE, [smallest_min if smallest_min is not None else Literal(0),
                                    largest_max, # can be none
                                    path, SANode(Op.TOP, [])])]
 
@@ -483,7 +483,7 @@ def _qual_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
         smallest_min = _min_literal(qual_min)
         largest_max = _max_literal(qual_max)
 
-        conj_out.append(SANode(Op.COUNTRANGE, [smallest_min if smallest_min else Literal(0),
+        conj_out.append(SANode(Op.COUNTRANGE, [smallest_min if smallest_min is not None else Literal(0),
                                                largest_max, # can be None
                                                path, result_qvs]))
 
