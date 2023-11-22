@@ -1,4 +1,6 @@
-from typing import List, Optional
+from __future__ import annotations
+from typing import List, Optional, Tuple
+from itertools import repeat
 from enum import Enum, auto
 
 from rdflib import Graph
@@ -45,7 +47,7 @@ class Op(Enum):
 
 
 class SANode:  # Shape Algebra Node
-    def __init__(self, op: Op, children: List, constraintComponent: URIRef | None = None):
+    def __init__(self, op: Op, children: List, constraintComponent: URIRef | Tuple[URIRef, ...]| None = None):
         self.op = op
         self.children = children
         self.constraintComponent = constraintComponent
@@ -64,7 +66,8 @@ class SANode:  # Shape Algebra Node
                 continue
             same_children = same_children and child_self == child_other
 
-        return (self.op == other.op) and same_children
+        return (self.op == other.op) and same_children and\
+            self.constraintComponent == other.constraintComponent
 
     def __repr__(self):
         """ Pretty representation of the SANode tree """
@@ -202,9 +205,15 @@ def _propertyshape_parse(graph: Graph, path: PANode,
 
 
 def _shape_parse(graph: Graph, shapename: Node) -> list[SANode]:
-    shapes = list(graph.objects(shapename, SH.node))
-    shapes += list(graph.objects(shapename, SH.property))
-    return [SANode(Op.HASSHAPE, [shape]) for shape in shapes]
+    shapes = list(
+        zip(graph.objects(shapename, SH.node),
+            repeat(SH.NodeConstraintComponent))
+    )
+    shapes += list(
+        zip(graph.objects(shapename, SH.property),
+            repeat(SH.PropertyConstraintComponent))
+    )
+    return [SANode(Op.HASSHAPE, [shape], cc) for shape, cc in shapes]
 
 
 def _logic_parse(graph: Graph, shapename: Node) -> list[SANode]:
@@ -229,14 +238,14 @@ def _logic_parse(graph: Graph, shapename: Node) -> list[SANode]:
         shacl_list = Collection(graph, xshape)
         _disj_out = []
         for s in shacl_list:
-            single_xone = SANode(Op.AND, [SANode(Op.HASSHAPE, [s])], SH.XoneConstraintComponent)
+            single_xone = SANode(Op.AND, [SANode(Op.HASSHAPE, [s])])
             for not_s in shacl_list:
                 if s != not_s:
                     single_xone.children.append(
                         SANode(Op.NOT, [SANode(Op.HASSHAPE, [not_s])]))
             _disj_out.append(single_xone)
         if _disj_out:
-            conj_out.append(SANode(Op.OR, _disj_out))
+            conj_out.append(SANode(Op.OR, _disj_out, SH.XoneConstraintComponent))
 
     return conj_out
 
@@ -303,7 +312,7 @@ def _length_range_parse(graph: Graph, shapename: Node) -> Optional[SANode]:
         length_range += [SH.MaxLengthConstraintComponent, min_maxlen]
 
     if len(length_range) > 1:
-        return SANode(Op.TEST, length_range)
+        return SANode(Op.TEST, length_range, tuple(filter(lambda x: isinstance(x, URIRef), length_range)))
 
 
 def _numeric_range_parse(graph: Graph, shapename: Node) -> Optional[SANode]:
@@ -351,7 +360,7 @@ def _numeric_range_parse(graph: Graph, shapename: Node) -> Optional[SANode]:
         numeric_range += [SH.MaxInclusiveConstraintComponent, min_maxincl]
 
     if len(numeric_range) > 1:
-        return SANode(Op.TEST, numeric_range)
+        return SANode(Op.TEST, numeric_range, tuple(filter(lambda x: isinstance(x, URIRef), numeric_range)))
 
 
 def _max_literal(list: List[Literal], invert=False) -> Optional[Literal]:
@@ -420,10 +429,16 @@ def _card_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
             
     if smallest_min is None and largest_max is None:
         return []
-    
+    elif smallest_min is None:
+        cc = SH.MaxCountConstraintComponent
+    elif largest_max is None:
+        cc = SH.MinCountConstraintComponent
+    else:
+        cc = (SH.MinCountConstraintComponent, SH.MaxCountConstraintComponent)
+
     return [SANode(Op.COUNTRANGE, [smallest_min if smallest_min is not None else Literal(0),
                                    largest_max, # can be none
-                                   path, SANode(Op.TOP, [])], SH.MinCountConstraintComponent)]
+                                   path, SANode(Op.TOP, [])], cc)]
 
 
 def _pair_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
@@ -488,10 +503,21 @@ def _qual_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
 
         smallest_min = _min_literal(qual_min)
         largest_max = _max_literal(qual_max)
+        if smallest_min is None and largest_max is None:
+            continue
+        elif smallest_min is None:
+            cc = SH.QualifiedMaxCountConstraintComponent
+        elif largest_max is None:
+            cc = SH.QualifiedMinCountConstraintComponent
+        else:
+            cc = (
+                SH.QualifiedMinCountConstraintComponent,
+                SH.QualifiedMaxCountConstraintComponent
+            )
 
         conj_out.append(SANode(Op.COUNTRANGE, [smallest_min if smallest_min is not None else Literal(0),
                                                largest_max, # can be None
-                                               path, result_qvs], SH.QualifiedMinCountConstraintComponent))
+                                               path, result_qvs], cc))
 
     return conj_out
 
@@ -522,12 +548,12 @@ def _lang_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
         literal_list += [tag for tag in shacl_list]
 
     if literal_list:
-        _out = SANode(Op.TEST, [SH.LanguageInConstraintComponent, literal_list])
+        _out = SANode(Op.TEST, [SH.LanguageInConstraintComponent, literal_list], SH.LanguageInConstraintComponent)
         conj_out.append(SANode(Op.FORALL, [path, _out]))
 
     # sh:uniqueLang
     if (shapename, SH.uniqueLang, Literal(True)) in graph:
-        conj_out.append(SANode(Op.UNIQUELANG, [path]))
+        conj_out.append(SANode(Op.UNIQUELANG, [path], SH.UniqueLangConstraintComponent))
 
     return conj_out
 
