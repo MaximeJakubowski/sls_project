@@ -1,0 +1,6 @@
+@prefix : <http://ex.tt/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+:subjto :the [ rdf:first :p ; rdf:rest [ rdf:first :q ; rdf:rest rdf:nil] ;
+               sh:inversePath :r ] .

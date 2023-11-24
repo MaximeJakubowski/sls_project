@@ -37,8 +37,11 @@ EX = Namespace('http://ex.tt/')
                                                   [PANode(POp.PROP, [EX.a])])])])),
     ('path_rest.ttl', PANode(POp.KLEENE,
                              [PANode(POp.ZEROORONE,
-                                     [PANode(POp.PROP, [EX.a])])]))
-                                     ])
+                                     [PANode(POp.PROP, [EX.a])])])),
+                                     
+    ('path_strange.ttl', PANode(POp.COMP, [PANode(POp.PROP, [EX.p]),
+                                           PANode(POp.PROP, [EX.q])])) 
+    ])
 def test_path_parsing(graph_file, expected_path):
     g = Graph()
     g.parse('./tests/sls_testfiles/' + graph_file)
