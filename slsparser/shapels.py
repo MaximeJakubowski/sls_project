@@ -32,7 +32,7 @@ class Op(Enum):
     #   - <value> is an rdflib literal (numeric) value
     #   There is at most one of min_... and at most one of max_... followed by a value
     HASSHAPE = auto() # Op.HASSHAPE iri
-    FORALL = auto() # Op.FORALL number PANode SANode
+    FORALL = auto() # Op.FORALL PANode SANode
     EQ = auto() # Op.EQ PANode PANode
     DISJ = auto() # Op.DISJ PANode PANode
     # for eq(id,p) and disj(id,p) I add id to pathls.POp.ID

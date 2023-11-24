@@ -26,7 +26,7 @@ A SANode is an object that represents a shape. The underlying idea is that this 
 ### Op
 There are more/other Op types than there are defined in the logical syntax in the paper. Mostly out of efficiency conciderations.
 
-- Op.HASVALUE has one child which is an rdflib IdentifiedNode or Literal. Only the value itself satisfies this shape.
+- Op.HASVALUE has one rdflib IdentifiedNode or Literal object as a child. Only the value itself satisfies this shape.
 - Op.TEST has different children, depending on what kind of test it represents.
 
 The first child is an IRI with the corresponding contraint component. The list of children can be:
@@ -42,6 +42,20 @@ The first child is an IRI with the corresponding contraint component. The list o
         - <range_statement> is one of: sh:MinLengthConstraintComponent, sh:MaxLengthConstraintComponent
         - - \<value> is an rdflib literal (numeric) value
     - There is at most one of min_... and at most one of max_... followed by a value
+
+- Op.NOT has one SANode object as a child. The shape is satisfied if the shape represented by the child is not satisfied.
+- Op.AND has one or more SANode objects as children. The shape is satisfied if all the shapes represented by the children are satisfied.
+- Op.OR has one or more SANode objects as children. The shape is satisfied if at least one of the shapes represented by the children is satisfied. 
+- Op.HASSHAPE has one rdflib IdentifiedNode as a child. The IdebtifiedNode represents a shape name. The shape is satisfied if the shape corresponding to the shapename is satisfied.
+- Op.FORALL has exactly two children. The first is a PANode representing a path expression. The second is an SANode representing a shape. A node satisfies the forall shape, if all nodes reachable by the path expression satisfy the shape represented by the SANode.
+- Op.EQ has exactly two children. Both are PANode objects representing path expressions. A node satisfies this shape if the set of nodes reachable by the first path expression is equal to the set of nodes reachable by the second path expression.
+- Op.DISJ has exactly two children. Both are PANode objects representing path expressions. A node satisfies this shape if the set of nodes reachable by the first path expression is disjoint from the set of nodes reachable by the second path expression.
+- Op.CLOSED has one or more rdflib uriref objects as children. The shape is satisfied by nodes that are only subjects of triples that have a predicate present in the list of children.
+- Op.LESSTHAN has exactly two children. Both are PANodes.
+- Op.LESSTHANEQ has exactly two children. Both are PANodes.
+- Op.UNIQUELANG has exactly one PANode child.
+- Op.TOP has no children. All nodes satisfy this shape.
+- Op.BOT has no children. No node satisfies this shape.
 
 ### PANodes
 A PANode is an object that represent a path expression. It is very similar to the structure of the SANode. The underlying idea is that this is a syntax tree of the path expressions. It consists of two components:
