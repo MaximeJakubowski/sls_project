@@ -27,6 +27,9 @@ class PANode:  # Path Algebra Node
 
     def __eq__(self, other):
         """ Overwrite the '==' operator """
+        if not isinstance(other, PANode):
+            return False
+
         if self.pop == POp.PROP:
             return self.pop == other.pop and \
               self.children[0] == other.children[0]

@@ -25,11 +25,23 @@ A SANode is an object that represents a shape. The underlying idea is that this 
 
 ### Op
 There are more/other Op types than there are defined in the logical syntax in the paper. Mostly out of efficiency conciderations.
+
 - Op.HASVALUE has one child which is an rdflib IdentifiedNode or Literal. Only the value itself satisfies this shape.
-- Op.TEST has different children, depending on what kind of test it represents. The list of children can be:
-    - ['datatype', {datatypeIRI}]
-    - ['nodekind', {nodekindIRI}]
-    - ['']
+- Op.TEST has different children, depending on what kind of test it represents.
+
+The first child is an IRI with the corresponding contraint component. The list of children can be:
+
+- [sh:LanguageInConstraintComponent ...]
+- [sh:DatatypeConstraintComponent, xsd:string] or other datatypes
+- [sh:NodeKindConstraintComponent, sh:iri] or other: any of the six combinations
+- [sh:PatternConstraintComponent, patternstring, flags]
+- [numeric_range, <range_statement>, \<value>]
+    - <range_statement> is one of: sh:MinExclusiveConstraintComponent, sh:MaxExclusiveConstraintComponent, sh:MinInclusiveConstraintComponent, sh:MaxInclusiveConstraintComponent
+    - \<value> is an rdflib literal (numeric) value There is at most one of min_... and at most one of max_... followed by a value
+    - [length_range, <range_statement>, \<value>]
+        - <range_statement> is one of: sh:MinLengthConstraintComponent, sh:MaxLengthConstraintComponent
+        - - \<value> is an rdflib literal (numeric) value
+    - There is at most one of min_... and at most one of max_... followed by a value
 
 ### PANodes
 A PANode is an object that represent a path expression. It is very similar to the structure of the SANode. The underlying idea is that this is a syntax tree of the path expressions. It consists of two components:
