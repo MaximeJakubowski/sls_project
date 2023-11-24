@@ -136,18 +136,26 @@ def _target_parse(graph: Graph, shapename: Node) -> SANode:
         out.children.append(SANode(Op.HASVALUE, [tnode]))
 
     for tclass in _extract_parameter_values(graph, shapename, SH.targetClass):
-        out.children.append(SANode(Op.COUNTRANGE, [
-            Literal(1),
-            None,
-            PANode(POp.PROP, [RDF.type]),
-            SANode(Op.HASVALUE, [tclass])]))
+        out.children.append(SANode(
+            Op.COUNTRANGE,
+            [
+                Literal(1), None, PANode(POp.COMP, [
+                    PANode(POp.PROP, [RDF.type]),
+                    PANode(POp.KLEENE, [PANode(POp.PROP, [RDFS.subClassOf])])
+                ]),
+                SANode(Op.HASVALUE, [tclass])
+            ]))
 
     if (shapename, RDF.type, RDFS.Class) in graph:
-        out.children.append(SANode(Op.COUNTRANGE, [
-            Literal(1),
-            None,
-            PANode(POp.PROP, [RDF.type]),
-            SANode(Op.HASVALUE, [shapename])]))
+        out.children.append(SANode(
+            Op.COUNTRANGE,
+            [
+                Literal(1), None, PANode(POp.COMP, [
+                    PANode(POp.PROP, [RDF.type]),
+                    PANode(POp.KLEENE, [PANode(POp.PROP, [RDFS.subClassOf])])
+                ]),
+                SANode(Op.HASVALUE, [shapename])
+            ]))
 
     for tsub in _extract_parameter_values(graph, shapename,
                                           SH.targetSubjectsOf):
