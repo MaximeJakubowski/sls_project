@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Set
 from itertools import repeat
 from enum import Enum, auto
 
@@ -80,14 +80,50 @@ class SANode:  # Shape Algebra Node
         return out
 
 
-def _extract_nodeshapes(graph: Graph) -> List[Node]:
-    # this defines what nodeshapes are parsed, should follow the spec on what a
-    # node shape is. (of type sh:NodeShape, object of sh:node, objects of sh:not...)
-    nodeshapes = list(graph.subjects(RDF.type, SH.NodeShape)) + \
-                 list(graph.objects(predicate=SH.node)) + \
-                 list(graph.objects(predicate=SH.qualifiedValueShape)) + \
-                 list(graph.objects(predicate=SH['not']))
+def _extract_shapes(graph: Graph) -> Set[Node]:
+    # A shape is:
+    # - instance of NodeShape or PropertyShape
+    # - subject of targetClass, target...
+    # - subject of any constraint component parameter
+    # - object of a constraint component parameter that expects a shape
 
+    shapes: Set[Node] = set(list(graph.objects(predicate=SH.property)) + \
+        list(graph.objects(predicate=SH.node)) + \
+        list(graph.objects(predicate=SH.qualifiedValueShape)) + \
+        list(graph.objects(predicate=SH['not'])) + \
+        list(graph.subjects(predicate=SH.node)) + \
+        list(graph.subjects(predicate=SH.qualifiedValueShape)) + \
+        list(graph.subjects(predicate=SH.qualifiedMinCount)) + \
+        list(graph.subjects(predicate=SH.qualifiedMaxCount)) + \
+        list(graph.subjects(predicate=SH['not'])) + \
+        list(graph.subjects(predicate=SH['class'])) + \
+        list(graph.subjects(predicate=SH.datatype)) + \
+        list(graph.subjects(predicate=SH.nodeKind)) + \
+        list(graph.subjects(predicate=SH.minCount)) + \
+        list(graph.subjects(predicate=SH.maxCount)) + \
+        list(graph.subjects(predicate=SH.minExclusive)) + \
+        list(graph.subjects(predicate=SH.minInclusive)) + \
+        list(graph.subjects(predicate=SH.maxExclusive)) + \
+        list(graph.subjects(predicate=SH.maxInclusive)) + \
+        list(graph.subjects(predicate=SH.minLength)) + \
+        list(graph.subjects(predicate=SH.maxLength)) + \
+        list(graph.subjects(predicate=SH.pattern)) + \
+        list(graph.subjects(predicate=SH.languageIn)) + \
+        list(graph.subjects(predicate=SH.uniqueLang)) + \
+        list(graph.subjects(predicate=SH.equals)) + \
+        list(graph.subjects(predicate=SH.disjoint)) + \
+        list(graph.subjects(predicate=SH.lessThan)) + \
+        list(graph.subjects(predicate=SH.lessThanOrEquals)) + \
+        list(graph.subjects(predicate=SH.closed)) + \
+        list(graph.subjects(predicate=SH.hasValue)) + \
+        list(graph.subjects(predicate=SH.targetClass)) + \
+        list(graph.subjects(predicate=SH.targetNode)) + \
+        list(graph.subjects(predicate=SH.targetObjectsOf)) + \
+        list(graph.subjects(predicate=SH.targetSubjectsOf)) + \
+        list(graph.subjects(predicate=SH.property)) + \
+        list(graph.subjects(RDF.type, SH.NodeShape)) + \
+        list(graph.subjects(RDF.type, SH.PropertyShape)))
+        
     # also members of a shacl list which are objects of sh:and, sh:or, sh:xone
     logical_lists = list(graph.objects(predicate=SH['or'])) + \
                     list(graph.objects(predicate=SH['and'])) + \
@@ -96,9 +132,20 @@ def _extract_nodeshapes(graph: Graph) -> List[Node]:
     for llist in logical_lists:
         for shapename in Collection(graph, llist):
             if SH.path not in graph.predicates(shapename):
-                nodeshapes.append(shapename)
+                shapes.add(shapename)
 
-    return nodeshapes
+    return shapes
+
+
+def _extract_propertyshapes(graph: Graph) -> Set[Node]:
+    # this defines what propertyshapes are parsed, should follow the spec on
+    # what a propertyshape is.
+    return _extract_shapes(graph).intersection(set(graph.subjects(predicate=SH.path)))
+
+def _extract_nodeshapes(graph: Graph) -> Set[Node]:
+    # this defines what nodeshapes are parsed, should follow the spec on what a
+    # node shape is: a shape that is not the subject of sh:path
+    return _extract_shapes(graph).difference(set(graph.subjects(predicate=SH.path)))
 
 
 def parse(graph: Graph, full: bool = True):
@@ -112,14 +159,8 @@ def parse(graph: Graph, full: bool = True):
     for nodeshape in nodeshapes:
         definitions[nodeshape] = clean_parsetree(_nodeshape_parse(graph, nodeshape), full)
         target[nodeshape] = _target_parse(graph, nodeshape)
-
-    # this defines what propertyshapes are parsed, should follow the spec on
-    # what a propertyshape is. (of type sh:property, subjects of sh:path, object of sh:property)
-    propertyshapes = list(graph.subjects(RDF.type, SH.PropertyShape)) + \
-                     list(graph.objects(predicate=SH.property)) + \
-                     list(graph.subjects(SH.path))
     
-    propertyshapes = list(set(propertyshapes)) # remove duplicates
+    propertyshapes = _extract_propertyshapes(graph)
 
     for propertyshape in propertyshapes:
         path = _extract_parameter_values(graph, propertyshape, SH.path)[0]
