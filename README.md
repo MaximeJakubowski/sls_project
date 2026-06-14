@@ -6,8 +6,13 @@ However, this logical syntax parser can be used for multiple purposes so this pr
 
 ## Features
 
-The idea is to have the following functionality:
-- Parsing a SHACL shapes graph into a parse tree of the [SHACL Logical Syntax](https://www.mjakubowski.info/files/shacl.pdf)
+- Parsing a SHACL shapes graph into a parse tree of the [SHACL Logical Syntax](https://www.mjakubowski.info/files/shacl.pdf) (`slsparser.parse`)
+- Transforming the parse tree (see `slsparser.utilities`):
+    - `expand_shape`: inline all `HASSHAPE` references
+    - `negation_normal_form`: push negations down to the leaves
+    - `clean_parsetree`: simplify the tree (remove `TOP`/`BOT`, collapse trivial `AND`/`OR`, ...)
+
+### Roadmap (not yet implemented)
 - Given a parse tree of the logical syntax, output a SHACL shapes graph
 
 This framework allows for more shapes than you currently can write with W3C SHACL. However, every shape that you can write in W3C SHACL can be written in this framework. 
@@ -24,12 +29,12 @@ A SANode is an object that represents a shape. The underlying idea is that this 
 - a list of children, the elements of this list are dependent on the Op
 
 ### Op
-There are more/other Op types than there are defined in the logical syntax in the paper. Mostly out of efficiency conciderations.
+There are more/other Op types than there are defined in the logical syntax in the paper. Mostly out of efficiency considerations.
 
 - Op.HASVALUE has one rdflib IdentifiedNode or Literal object as a child. Only the value itself satisfies this shape.
 - Op.TEST has different children, depending on what kind of test it represents.
 
-The first child is an IRI with the corresponding contraint component. The list of children can be:
+The first child is an IRI with the corresponding constraint component. The list of children can be:
 
 - [sh:LanguageInConstraintComponent ...]
 - [sh:DatatypeConstraintComponent, xsd:string] or other datatypes
@@ -46,7 +51,7 @@ The first child is an IRI with the corresponding contraint component. The list o
 - Op.NOT has one SANode object as a child. The shape is satisfied if the shape represented by the child is not satisfied.
 - Op.AND has one or more SANode objects as children. The shape is satisfied if all the shapes represented by the children are satisfied.
 - Op.OR has one or more SANode objects as children. The shape is satisfied if at least one of the shapes represented by the children is satisfied. 
-- Op.HASSHAPE has one rdflib IdentifiedNode as a child. The IdebtifiedNode represents a shape name. The shape is satisfied if the shape corresponding to the shapename is satisfied.
+- Op.HASSHAPE has one rdflib IdentifiedNode as a child. The IdentifiedNode represents a shape name. The shape is satisfied if the shape corresponding to the shapename is satisfied.
 - Op.FORALL has exactly two children. The first is a PANode representing a path expression. The second is an SANode representing a shape. A node satisfies the forall shape, if all nodes reachable by the path expression satisfy the shape represented by the SANode.
 - Op.EQ has exactly two children. Both are PANode objects representing path expressions. A node satisfies this shape if the set of nodes reachable by the first path expression is equal to the set of nodes reachable by the second path expression.
 - Op.DISJ has exactly two children. Both are PANode objects representing path expressions. A node satisfies this shape if the set of nodes reachable by the first path expression is disjoint from the set of nodes reachable by the second path expression.
