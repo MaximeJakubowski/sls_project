@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slsparser"
+version = "1.0.0"
+description = "Parser from SHACL into the SHACL Logical Syntax."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Maxime Jakubowski", email = "maxime.jak@gmail.com" },
+]
+keywords = ["SHACL", "RDF", "logical syntax", "shapes"]
+dependencies = [
+    "rdflib>=6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/MaximeJakubowski/sls_project"
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools]
+packages = ["slsparser"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
