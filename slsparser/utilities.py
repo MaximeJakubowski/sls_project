@@ -50,21 +50,27 @@ def negation_normal_form(node: SANode) -> SANode:
         return nnode.children[0]
 
     if nnode.op == Op.COUNTRANGE:
-        new_children = []
-        if nnode.children[1] is not None: 
-            new_children.append(SANode(Op.COUNTRANGE, 
-                                       [nnode.children[1], None, 
-                                        nnode.children[2], 
-                                        negation_normal_form(
-                                            SANode(Op.NOT, [nnode.children[3]]))]))
-        if nnode.children[0] != 0:
-            new_children.append(SANode(Op.COUNTRANGE, 
-                                       [0, nnode.children[0],
-                                        nnode.children[2],
-                                        negation_normal_form(
-                                            SANode(Op.NOT, [nnode.children[3]]))]))
+        lower = nnode.children[0]
+        upper = nnode.children[1]
 
-        return SANode(Op.OR, new_children)
+        if int(lower) == 0:
+            return SANode(Op.COUNTRANGE, [Literal(int(upper) + 1), None,
+                                          nnode.children[2],
+                                          nnode.children[3]])
+        
+        if upper is None:
+            return SANode(Op.COUNTRANGE, [Literal(0), Literal(int(lower) - 1),
+                                          nnode.children[2],
+                                          nnode.children[3]])
+
+        return SANode(Op.OR, [
+            SANode(Op.COUNTRANGE, [Literal(int(upper)+1), None,
+                                    nnode.children[2],
+                                    nnode.children[3]]),
+            SANode(Op.COUNTRANGE, [Literal(0), Literal(int(lower) - 1),
+                                   nnode.children[2],
+                                   nnode.children[3]])
+        ])
 
     if nnode.op == Op.FORALL:
         return SANode(Op.COUNTRANGE, [Literal(1), None, 
@@ -140,10 +146,12 @@ def clean_parsetree(sanode: SANode, full: bool = True) -> SANode:
         if new_node.children[1].op == Op.TOP:
             return SANode(Op.TOP, [])
         if new_node.children[1].op == Op.BOT:
-            return SANode(Op.COUNTRANGE, [0, 0, new_node.children[0], SANode(Op.TOP, [])])
-        
+            return SANode(Op.COUNTRANGE, [Literal(0), Literal(0), new_node.children[0], SANode(Op.TOP, [])])
+
     if new_node.op == Op.COUNTRANGE and new_node.children[3].op == Op.BOT:
-        if new_node.children[0] == 0:
+        # children[0] is an rdflib Literal, so compare numerically:
+        # Literal(0) == 0 is False, which would wrongly yield BOT here.
+        if int(new_node.children[0]) == 0:
             return SANode(Op.TOP, [])
         return SANode(Op.BOT, [])
     
