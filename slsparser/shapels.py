@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Optional, Tuple, Set
+from typing import Dict, List, Optional, Tuple, Set
 from itertools import repeat
 from enum import Enum, auto
 
@@ -87,52 +87,34 @@ def _extract_shapes(graph: Graph) -> Set[Node]:
     # - subject of any constraint component parameter
     # - object of a constraint component parameter that expects a shape
 
-    shapes: Set[Node] = set(list(graph.objects(predicate=SH.property)) + \
-        list(graph.objects(predicate=SH.node)) + \
-        list(graph.objects(predicate=SH.qualifiedValueShape)) + \
-        list(graph.objects(predicate=SH['not'])) + \
-        list(graph.subjects(predicate=SH.node)) + \
-        list(graph.subjects(predicate=SH.qualifiedValueShape)) + \
-        list(graph.subjects(predicate=SH.qualifiedMinCount)) + \
-        list(graph.subjects(predicate=SH.qualifiedMaxCount)) + \
-        list(graph.subjects(predicate=SH['not'])) + \
-        list(graph.subjects(predicate=SH['class'])) + \
-        list(graph.subjects(predicate=SH.datatype)) + \
-        list(graph.subjects(predicate=SH.nodeKind)) + \
-        list(graph.subjects(predicate=SH.minCount)) + \
-        list(graph.subjects(predicate=SH.maxCount)) + \
-        list(graph.subjects(predicate=SH.minExclusive)) + \
-        list(graph.subjects(predicate=SH.minInclusive)) + \
-        list(graph.subjects(predicate=SH.maxExclusive)) + \
-        list(graph.subjects(predicate=SH.maxInclusive)) + \
-        list(graph.subjects(predicate=SH.minLength)) + \
-        list(graph.subjects(predicate=SH.maxLength)) + \
-        list(graph.subjects(predicate=SH.pattern)) + \
-        list(graph.subjects(predicate=SH.languageIn)) + \
-        list(graph.subjects(predicate=SH.uniqueLang)) + \
-        list(graph.subjects(predicate=SH.equals)) + \
-        list(graph.subjects(predicate=SH.disjoint)) + \
-        list(graph.subjects(predicate=SH.lessThan)) + \
-        list(graph.subjects(predicate=SH.lessThanOrEquals)) + \
-        list(graph.subjects(predicate=SH.closed)) + \
-        list(graph.subjects(predicate=SH.hasValue)) + \
-        list(graph.subjects(predicate=SH.targetClass)) + \
-        list(graph.subjects(predicate=SH.targetNode)) + \
-        list(graph.subjects(predicate=SH.targetObjectsOf)) + \
-        list(graph.subjects(predicate=SH.targetSubjectsOf)) + \
-        list(graph.subjects(predicate=SH.property)) + \
-        list(graph.subjects(RDF.type, SH.NodeShape)) + \
-        list(graph.subjects(RDF.type, SH.PropertyShape)))
-        
-    # also members of a shacl list which are objects of sh:and, sh:or, sh:xone
-    logical_lists = list(graph.objects(predicate=SH['or'])) + \
-                    list(graph.objects(predicate=SH['and'])) + \
-                    list(graph.objects(predicate=SH.xone))
+    # parameters whose object is (or may be) a shape
+    object_parameters = [SH.property, SH.node, SH.qualifiedValueShape, SH['not']]
 
-    for llist in logical_lists:
-        for shapename in Collection(graph, llist):
-            if SH.path not in graph.predicates(shapename):
-                shapes.add(shapename)
+    # parameters whose subject is a shape (constraint components and targets)
+    subject_parameters = [
+        SH.node, SH.qualifiedValueShape, SH.qualifiedMinCount, SH.qualifiedMaxCount,
+        SH['not'], SH['class'], SH.datatype, SH.nodeKind, SH.minCount, SH.maxCount,
+        SH.minExclusive, SH.minInclusive, SH.maxExclusive, SH.maxInclusive,
+        SH.minLength, SH.maxLength, SH.pattern, SH.languageIn, SH.uniqueLang,
+        SH.equals, SH.disjoint, SH.lessThan, SH.lessThanOrEquals, SH.closed,
+        SH.hasValue, SH.targetClass, SH.targetNode, SH.targetObjectsOf,
+        SH.targetSubjectsOf, SH.property,
+    ]
+
+    shapes: Set[Node] = set()
+    for parameter in object_parameters:
+        shapes.update(graph.objects(predicate=parameter))
+    for parameter in subject_parameters:
+        shapes.update(graph.subjects(predicate=parameter))
+    shapes.update(graph.subjects(RDF.type, SH.NodeShape))
+    shapes.update(graph.subjects(RDF.type, SH.PropertyShape))
+
+    # also members of a shacl list which are objects of sh:and, sh:or, sh:xone
+    for parameter in [SH['or'], SH['and'], SH.xone]:
+        for llist in graph.objects(predicate=parameter):
+            for shapename in Collection(graph, llist):
+                if SH.path not in graph.predicates(shapename):
+                    shapes.add(shapename)
 
     return shapes
 
@@ -148,7 +130,9 @@ def _extract_nodeshapes(graph: Graph) -> Set[Node]:
     return _extract_shapes(graph).difference(set(graph.subjects(predicate=SH.path)))
 
 
-def parse(graph: Graph, full: bool = True):
+def parse(graph: Graph, full: bool = True) -> Tuple[Dict, Dict]:
+    # Imported here (not at module level) to avoid a circular import:
+    # slsparser.utilities imports SANode/Op from this module.
     from slsparser.utilities import clean_parsetree
 
     definitions = {}  # a mapping: shapename, SANode
@@ -218,6 +202,9 @@ def _target_parse(graph: Graph, shapename: Node) -> SANode:
     if not out.children:
         out = SANode(Op.BOT, [])
 
+    if out.op == Op.OR and len(out.children) == 1:
+        return out.children[0]
+    
     return out
 
 
@@ -231,6 +218,7 @@ def _nodeshape_parse(graph: Graph, shapename: Node) -> SANode:
             _value_parse(graph, shapename) + \
             _in_parse(graph, shapename) + \
             _closed_parse(graph, shapename) + \
+            _lang_parse_nodeshape(graph, shapename) + \
             _pair_parse(graph, PANode(POp.ID, []), shapename) # EQ/DISJ id
 
     if conj:
@@ -245,7 +233,7 @@ def _propertyshape_parse(graph: Graph, path: PANode,
             _pair_parse(graph, path, shapename) + \
             _qual_parse(graph, path, shapename) + \
             _all_parse(graph, path, shapename) + \
-            _lang_parse(graph, path, shapename)
+            _lang_parse_propertyshape(graph, path, shapename)
     
     if conj:
         return SANode(Op.AND, conj)
@@ -412,12 +400,12 @@ def _numeric_range_parse(graph: Graph, shapename: Node) -> Optional[SANode]:
         return SANode(Op.TEST, numeric_range, tuple(filter(lambda x: isinstance(x, URIRef), numeric_range)))
 
 
-def _max_literal(list: List[Literal], invert=False) -> Optional[Literal]:
-    if len(list) == 0:
+def _max_literal(literals: List[Literal], invert=False) -> Optional[Literal]:
+    if len(literals) == 0:
         return None
-    
-    m_lit = list[0]
-    for lit in list:
+
+    m_lit = literals[0]
+    for lit in literals:
         if not invert:
             m_lit = max(m_lit, lit)
         else:
@@ -426,8 +414,8 @@ def _max_literal(list: List[Literal], invert=False) -> Optional[Literal]:
     return m_lit
 
 
-def _min_literal(list: List[Literal]) -> Optional[Literal]:
-    return _max_literal(list, invert=True)
+def _min_literal(literals: List[Literal]) -> Optional[Literal]:
+    return _max_literal(literals, invert=True)
 
 
 def _value_parse(graph: Graph, shapename: Node) -> list[SANode]:
@@ -471,22 +459,25 @@ def _closed_parse(graph: Graph, shapename: Node) -> list[SANode]:
 
 
 def _card_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
-    smallest_min = _min_literal(
+    # Repeated min/maxCount values are a conjunction of constraints, so the
+    # effective range is the most restrictive one: the largest minCount and the
+    # smallest maxCount. This matches how _numeric_range_parse aggregates bounds.
+    effective_min = _max_literal(
         _extract_parameter_values(graph, shapename, SH.minCount))
-    largest_max = _max_literal(
+    effective_max = _min_literal(
         _extract_parameter_values(graph, shapename, SH.maxCount))
-            
-    if smallest_min is None and largest_max is None:
+
+    if effective_min is None and effective_max is None:
         return []
-    elif smallest_min is None:
+    elif effective_min is None:
         cc = SH.MaxCountConstraintComponent
-    elif largest_max is None:
+    elif effective_max is None:
         cc = SH.MinCountConstraintComponent
     else:
         cc = (SH.MinCountConstraintComponent, SH.MaxCountConstraintComponent)
 
-    return [SANode(Op.COUNTRANGE, [smallest_min if smallest_min is not None else Literal(0),
-                                   largest_max, # can be none
+    return [SANode(Op.COUNTRANGE, [effective_min if effective_min is not None else Literal(0),
+                                   effective_max, # can be none
                                    path, SANode(Op.TOP, [])], cc)]
 
 
@@ -550,13 +541,16 @@ def _qual_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
             result_qvs.children.append(SANode(Op.NOT, [
                 SANode(Op.HASSHAPE, [s])]))
 
-        smallest_min = _min_literal(qual_min)
-        largest_max = _max_literal(qual_max)
-        if smallest_min is None and largest_max is None:
+        # Repeated qualified min/max counts form a conjunction of constraints,
+        # so the effective range is the most restrictive one: the largest min
+        # and the smallest max (consistent with _card_parse).
+        effective_min = _max_literal(qual_min)
+        effective_max = _min_literal(qual_max)
+        if effective_min is None and effective_max is None:
             continue
-        elif smallest_min is None:
+        elif effective_min is None:
             cc = SH.QualifiedMaxCountConstraintComponent
-        elif largest_max is None:
+        elif effective_max is None:
             cc = SH.QualifiedMinCountConstraintComponent
         else:
             cc = (
@@ -564,8 +558,8 @@ def _qual_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
                 SH.QualifiedMaxCountConstraintComponent
             )
 
-        conj_out.append(SANode(Op.COUNTRANGE, [smallest_min if smallest_min is not None else Literal(0),
-                                               largest_max, # can be None
+        conj_out.append(SANode(Op.COUNTRANGE, [effective_min if effective_min is not None else Literal(0),
+                                               effective_max, # can be None
                                                path, result_qvs], cc))
 
     return conj_out
@@ -587,14 +581,30 @@ def _all_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
     return conj_out
 
 
-def _lang_parse(graph: Graph, path: PANode, shapename: Node) -> list[SANode]:
+def _lang_parse_nodeshape(graph: Graph, shapename: Node) -> List[SANode]:
     conj_out = []
 
     # sh:languageIn
     literal_list = []
     for langin in _extract_parameter_values(graph, shapename, SH.languageIn):
         shacl_list = Collection(graph, langin)
-        literal_list += [tag for tag in shacl_list]
+        literal_list += [tag for tag in shacl_list] # TODO: multiple languagein is intersection?
+
+    if literal_list:
+        _out = SANode(Op.TEST, [SH.LanguageInConstraintComponent, literal_list], SH.LanguageInConstraintComponent)
+        conj_out.append(_out)
+
+    return conj_out
+
+
+def _lang_parse_propertyshape(graph: Graph, path: PANode, shapename: Node) -> List[SANode]:
+    conj_out = []
+
+    # sh:languageIn
+    literal_list = []
+    for langin in _extract_parameter_values(graph, shapename, SH.languageIn):
+        shacl_list = Collection(graph, langin)
+        literal_list += [tag for tag in shacl_list] # TODO: multiple languagein is intersection?
 
     if literal_list:
         _out = SANode(Op.TEST, [SH.LanguageInConstraintComponent, literal_list], SH.LanguageInConstraintComponent)
