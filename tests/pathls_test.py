@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pytest import mark
 from rdflib import Graph, URIRef, Namespace
 
@@ -5,6 +7,7 @@ from rdflib import Graph, URIRef, Namespace
 from slsparser.pathls import POp, PANode, parse
 
 EX = Namespace('http://ex.tt/')
+TESTFILES = Path(__file__).parent / 'sls_testfiles'
 
 
 @mark.parametrize('graph_file, expected_path', [
@@ -44,7 +47,7 @@ EX = Namespace('http://ex.tt/')
     ])
 def test_path_parsing(graph_file, expected_path):
     g = Graph()
-    g.parse('./tests/sls_testfiles/' + graph_file)
+    g.parse(str(TESTFILES / graph_file))
 
     path = next(g.objects(URIRef('http://ex.tt/subjto')))
 

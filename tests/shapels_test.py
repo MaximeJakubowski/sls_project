@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pytest import mark
 
 from rdflib.namespace import RDF, RDFS, XSD, SH
@@ -9,6 +11,7 @@ from slsparser.utilities import expand_shape
 
 
 EX = Namespace('http://ex.tt/')
+TESTFILES = Path(__file__).parent / 'sls_testfiles'
 
 
 @mark.parametrize('graph_file, expected', [
@@ -129,32 +132,14 @@ EX = Namespace('http://ex.tt/')
      {EX.shape1: SANode(Op.EQ, [PANode(POp.ID, []), PANode(POp.PROP, [EX.p])], SH.EqualsConstraintComponent),
       EX.shape2: SANode(Op.DISJ, [PANode(POp.ID, []), PANode(POp.PROP, [EX.p])], SH.DisjointConstraintComponent)})])
 def test_shape_parsing(graph_file, expected):
-    print('==========================')
-    print('==========================')
-    print('==========================')
-    print('==========================')
-    print('==========================')
     g = Graph()
-    g.parse(f'./tests/sls_testfiles/{graph_file}')
+    g.parse(str(TESTFILES / graph_file))
     g.namespace_manager.bind('rdf', RDF)
-    # print('********* PARSED GRAPH  *********')
-    # for s, p, o in g:
-    #     print(s.n3(g.namespace_manager),
-    #           p.n3(g.namespace_manager),
-    #           o.n3(g.namespace_manager))
 
     parsed = parse(g)[0]
 
-    print('********* SHAPE PARSING *********')
     for key in list(expected):
-        #print('------PARSED------')
-        #print(key, parsed[key])
-        opt = parsed[key]
-        print('------OPTIMIZED------')
-        print(opt)
-        print('------EXPECTED------')
-        print(expected[key])
-        assert opt == expected[key]
+        assert parsed[key] == expected[key]
 
 
 @mark.parametrize('graph_file, expected', [
@@ -164,7 +149,7 @@ def test_shape_parsing(graph_file, expected):
                             SANode(Op.HASVALUE, [Literal(1)])]))])
 def test_shape_expansion(graph_file, expected):
     g = Graph()
-    g.parse(f'./tests/sls_testfiles/{graph_file}')
+    g.parse(str(TESTFILES / graph_file))
     g.namespace_manager.bind('rdf', RDF)
 
     parsed = parse(g)[0]
@@ -176,5 +161,44 @@ def test_shape_expansion(graph_file, expected):
     expanded = expand_shape(opt_schema, opt_schema[EX.shape])
 
     assert expanded == expected
+
+
+def test_repeated_mincount_keeps_most_restrictive():
+    # Two sh:minCount values form a conjunction of constraints, so the effective
+    # lower bound is the largest one (20), not the smallest (2).
+    g = Graph()
+    g.parse(data="""
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://ex.tt/> .
+        ex:shape a sh:PropertyShape ;
+            sh:path ex:p ;
+            sh:minCount 2 ;
+            sh:minCount 20 .
+    """, format='turtle')
+
+    shape = parse(g)[0][EX.shape]
+
+    assert shape.op == Op.COUNTRANGE
+    assert shape.children[0] == Literal(20)
+
+
+def test_repeated_qualified_mincount_keeps_most_restrictive():
+    # Same conjunction semantics as plain cardinality: the effective qualified
+    # lower bound is the largest one (20), not the smallest (2).
+    g = Graph()
+    g.parse(data="""
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://ex.tt/> .
+        ex:shape a sh:PropertyShape ;
+            sh:path ex:p ;
+            sh:qualifiedValueShape ex:q ;
+            sh:qualifiedMinCount 2 ;
+            sh:qualifiedMinCount 20 .
+    """, format='turtle')
+
+    shape = parse(g)[0][EX.shape]
+
+    assert shape.op == Op.COUNTRANGE
+    assert shape.children[0] == Literal(20)
 
 
